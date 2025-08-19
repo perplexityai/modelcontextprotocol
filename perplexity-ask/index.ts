@@ -8,6 +8,18 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 
+// Configure proxy for fetch using undici if proxy environment variables are set
+const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+if (proxyUrl) {
+  try {
+    const { setGlobalDispatcher, ProxyAgent } = await import('undici');
+    setGlobalDispatcher(new ProxyAgent(proxyUrl));
+    console.error(`Configured proxy: ${proxyUrl}`);
+  } catch (error) {
+    console.error('Warning: Could not configure proxy for fetch:', error);
+  }
+}
+
 /**
  * Definition of the Perplexity Ask Tool.
  * This tool accepts an array of messages and returns a chat completion response
