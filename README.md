@@ -125,6 +125,8 @@ If you see both of these this means that the integration is active. Congratulati
 
 Currently, the search parameters used are the default ones. You can modify any search parameter in the API call directly in the `index.ts` script. For this, please refer to the official [API documentation](https://docs.perplexity.ai/api-reference/chat-completions).
 
+If you need to go through a web proxy to reach Perplexity API, add `HTTPS_PROXY` environment variable to the `env` section.
+
 ### Troubleshooting 
 
 The Claude documentation provides an excellent [troubleshooting guide](https://modelcontextprotocol.io/docs/tools/debugging) you can refer to. However, you can still reach out to us at api@perplexity.ai for any additional support or [file a bug](https://github.com/ppl-ai/api-discussion/issues). 
