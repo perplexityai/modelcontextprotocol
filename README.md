@@ -1,6 +1,6 @@
 # Perplexity Ask MCP Server
 
-An MCP server implementation that integrates the Sonar API to provide Claude with unparalleled real-time, web-wide research.
+An MCP server implementation that integrates the Sonar API to provide Claude with unparalleled real-time, web-wide research capabilities, now enhanced with advanced date filtering options.
 
 Please refer to the official [DeepWiki page](https://deepwiki.com/ppl-ai/modelcontextprotocol) for assistance with implementation. 
 
@@ -10,22 +10,89 @@ Please refer to the official [DeepWiki page](https://deepwiki.com/ppl-ai/modelco
 
 ![System Architecture](perplexity-ask/assets/system_architecture.png)
 
-
-
-
-
 ![Demo](perplexity-ask/assets/demo_screenshot.png)
-
 
 ## Tools
 
-- **perplexity_ask**
-  - Engage in a conversation with the Sonar API for live web searches.
-  - **Inputs:**
-    - `messages` (array): An array of conversation messages.
-      - Each message must include:
-        - `role` (string): The role of the message (e.g., `system`, `user`, `assistant`).
-        - `content` (string): The content of the message.
+### **perplexity_ask**
+- Engage in a conversation with the Sonar API for live web searches.
+- **Inputs:**
+  - `messages` (array): An array of conversation messages.
+    - Each message must include:
+      - `role` (string): The role of the message (e.g., `system`, `user`, `assistant`).
+      - `content` (string): The content of the message.
+  - **Date Filtering Options** (all optional):
+    - `search_after_date_filter` (string): Filter to content published after this date (format: M/D/YYYY)
+    - `search_before_date_filter` (string): Filter to content published before this date (format: M/D/YYYY)
+    - `last_updated_after_filter` (string): Filter to content updated after this date (format: M/D/YYYY)
+    - `last_updated_before_filter` (string): Filter to content updated before this date (format: M/D/YYYY)
+    - `search_recency_filter` (string): Filter by predefined periods ("day", "week", "month", "year")
+
+### **perplexity_research**
+- Perform deep research queries using the Perplexity API with comprehensive analysis.
+- **Inputs:** Same as `perplexity_ask` including all date filtering options.
+
+### **perplexity_reason**
+- Execute advanced reasoning tasks with enhanced analytical capabilities.
+- **Inputs:** Same as `perplexity_ask` including all date filtering options.
+
+## Date Filtering Features
+
+### Publication Date Filters
+Filter results based on when content was originally created or published:
+- `search_after_date_filter`: Include only content published after the specified date
+- `search_before_date_filter`: Include only content published before the specified date
+
+### Last Updated Date Filters
+Filter results based on when content was last modified:
+- `last_updated_after_filter`: Include only content updated after the specified date
+- `last_updated_before_filter`: Include only content updated before the specified date
+
+### Recency Filter
+Quick filtering by predefined time periods relative to the current date:
+- `search_recency_filter`: Use "day", "week", "month", or "year" for convenience
+
+### Filter Usage Examples
+
+1. **Find recent AI developments from the past week:**
+```json
+{
+  "messages": [{"role": "user", "content": "What are the latest AI developments?"}],
+  "search_recency_filter": "week"
+}
+```
+
+2. **Research articles published in March 2025:**
+```json
+{
+  "messages": [{"role": "user", "content": "Machine learning research trends"}],
+  "search_after_date_filter": "3/1/2025",
+  "search_before_date_filter": "3/31/2025"
+}
+```
+
+3. **Find recently updated documentation:**
+```json
+{
+  "messages": [{"role": "user", "content": "React development best practices"}],
+  "last_updated_after_filter": "1/1/2025"
+}
+```
+
+4. **Combine publication and update filters:**
+```json
+{
+  "messages": [{"role": "user", "content": "Python tutorials"}],
+  "search_after_date_filter": "1/1/2024",
+  "search_before_date_filter": "12/31/2024",
+  "last_updated_after_filter": "2/1/2025"
+}
+```
+
+### Important Notes
+- Date format must be exactly M/D/YYYY (e.g., "3/1/2025" or "03/01/2025")
+- `search_recency_filter` cannot be combined with other date filters
+- All date filters are optional and can be used independently or together (except recency filter)
 
 ## Configuration
 
