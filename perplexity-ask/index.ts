@@ -22,6 +22,13 @@
  * - search_recency_filter: Quick filter by predefined periods ("day", "week", "month", "year")
  *   Note: Cannot be combined with other date filters
  * 
+ * DOMAIN FILTERING:
+ * - search_domain_filter: Array of domains/URLs to include (allowlist) or exclude (denylist)
+ *   - Allowlist mode: ["domain1.com", "domain2.com"] - Include only these domains
+ *   - Denylist mode: ["-domain1.com", "-domain2.com"] - Exclude these domains
+ *   - URL-level filtering: ["https://example.com/specific-page"] for granular control
+ *   - Maximum 20 domains/URLs allowed
+ * 
  * EXAMPLES:
  * 
  * 1. Find recent AI news from the past week:
@@ -41,6 +48,24 @@
  *    {
  *      "messages": [{"role": "user", "content": "React best practices"}],
  *      "last_updated_after_filter": "1/1/2025"
+ *    }
+ * 
+ * 4. Search only trusted domains:
+ *    {
+ *      "messages": [{"role": "user", "content": "AI research papers"}],
+ *      "search_domain_filter": ["arxiv.org", "nature.com", "science.org"]
+ *    }
+ * 
+ * 5. Exclude social media and forum sites:
+ *    {
+ *      "messages": [{"role": "user", "content": "Machine learning tutorials"}],
+ *      "search_domain_filter": ["-reddit.com", "-quora.com", "-pinterest.com"]
+ *    }
+ * 
+ * 6. Target specific documentation pages:
+ *    {
+ *      "messages": [{"role": "user", "content": "Python async programming"}],
+ *      "search_domain_filter": ["https://docs.python.org/3/library/asyncio.html", "stackoverflow.com"]
  *    }
  */
 
@@ -64,7 +89,8 @@ const PERPLEXITY_ASK_TOOL: Tool = {
     "Engages in a conversation using the Sonar API. " +
     "Accepts an array of messages (each with a role and content) " +
     "and returns a ask completion response from the Perplexity model. " +
-    "Supports optional date filtering to constrain search results by publication date, last updated date, or recency.",
+    "Supports optional date filtering to constrain search results by publication date, last updated date, or recency, " +
+    "and domain filtering to include or exclude specific websites from search results.",
   inputSchema: {
     type: "object",
     properties: {
@@ -106,6 +132,13 @@ const PERPLEXITY_ASK_TOOL: Tool = {
         type: "string",
         enum: ["day", "week", "month", "year"],
         description: "Filter results by predefined time periods relative to current date. Cannot be combined with other date filters.",
+      },
+      search_domain_filter: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+        description: "Filter search results by domain or URL. Use allowlist mode (include only specified domains/URLs) or denylist mode (exclude domains/URLs with '-' prefix). Examples: ['wikipedia.org', 'github.com'] for allowlist, ['-reddit.com', '-quora.com'] for denylist. Supports up to 20 entries. Can mix domains ('example.com') and specific URLs ('https://example.com/page').",
       },
     },
     required: ["messages"],
@@ -123,7 +156,8 @@ const PERPLEXITY_RESEARCH_TOOL: Tool = {
     "Performs deep research using the Perplexity API. " +
     "Accepts an array of messages (each with a role and content) " +
     "and returns a comprehensive research response with citations. " +
-    "Supports optional date filtering to constrain search results by publication date, last updated date, or recency.",
+    "Supports optional date filtering to constrain search results by publication date, last updated date, or recency, " +
+    "and domain filtering to include or exclude specific websites from search results.",
   inputSchema: {
     type: "object",
     properties: {
@@ -165,6 +199,13 @@ const PERPLEXITY_RESEARCH_TOOL: Tool = {
         type: "string",
         enum: ["day", "week", "month", "year"],
         description: "Filter results by predefined time periods relative to current date. Cannot be combined with other date filters.",
+      },
+      search_domain_filter: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+        description: "Filter search results by domain or URL. Use allowlist mode (include only specified domains/URLs) or denylist mode (exclude domains/URLs with '-' prefix). Examples: ['wikipedia.org', 'github.com'] for allowlist, ['-reddit.com', '-quora.com'] for denylist. Supports up to 20 entries. Can mix domains ('example.com') and specific URLs ('https://example.com/page').",
       },
     },
     required: ["messages"],
@@ -182,7 +223,8 @@ const PERPLEXITY_REASON_TOOL: Tool = {
     "Performs reasoning tasks using the Perplexity API. " +
     "Accepts an array of messages (each with a role and content) " +
     "and returns a well-reasoned response using the sonar-reasoning-pro model. " +
-    "Supports optional date filtering to constrain search results by publication date, last updated date, or recency.",
+    "Supports optional date filtering to constrain search results by publication date, last updated date, or recency, " +
+    "and domain filtering to include or exclude specific websites from search results.",
   inputSchema: {
     type: "object",
     properties: {
@@ -225,6 +267,13 @@ const PERPLEXITY_REASON_TOOL: Tool = {
         enum: ["day", "week", "month", "year"],
         description: "Filter results by predefined time periods relative to current date. Cannot be combined with other date filters.",
       },
+      search_domain_filter: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+        description: "Filter search results by domain or URL. Use allowlist mode (include only specified domains/URLs) or denylist mode (exclude domains/URLs with '-' prefix). Examples: ['wikipedia.org', 'github.com'] for allowlist, ['-reddit.com', '-quora.com'] for denylist. Supports up to 20 entries. Can mix domains ('example.com') and specific URLs ('https://example.com/page').",
+      },
     },
     required: ["messages"],
   },
@@ -238,20 +287,21 @@ if (!PERPLEXITY_API_KEY) {
 }
 
 /**
- * Interface for date filtering options
+ * Interface for filtering options
  */
-interface DateFilterOptions {
+interface FilterOptions {
   search_after_date_filter?: string;
   search_before_date_filter?: string;
   last_updated_after_filter?: string;
   last_updated_before_filter?: string;
   search_recency_filter?: "day" | "week" | "month" | "year";
+  search_domain_filter?: string[];
 }
 
 /**
- * Validates date filter options to ensure they follow the correct format and constraints
+ * Validates filter options to ensure they follow the correct format and constraints
  */
-function validateDateFilters(filters: DateFilterOptions): void {
+function validateFilters(filters: FilterOptions): void {
   const dateRegex = /^(0?[1-9]|1[0-2])\/(0?[1-9]|[12][0-9]|3[01])\/[0-9]{4}$/;
   
   // Validate date format for specific date filters
@@ -274,6 +324,21 @@ function validateDateFilters(filters: DateFilterOptions): void {
        filters.last_updated_after_filter || filters.last_updated_before_filter)) {
     throw new Error("search_recency_filter cannot be combined with other date filters");
   }
+  
+  // Validate domain filter constraints
+  if (filters.search_domain_filter) {
+    if (filters.search_domain_filter.length > 20) {
+      throw new Error("search_domain_filter can contain a maximum of 20 domains/URLs");
+    }
+    
+    // Check if it's mixing allowlist and denylist modes
+    const hasAllowlist = filters.search_domain_filter.some(domain => !domain.startsWith('-'));
+    const hasDenylist = filters.search_domain_filter.some(domain => domain.startsWith('-'));
+    
+    if (hasAllowlist && hasDenylist) {
+      throw new Error("search_domain_filter cannot mix allowlist and denylist modes. Use either domains without '-' prefix (allowlist) or domains with '-' prefix (denylist), but not both.");
+    }
+  }
 }
 
 /**
@@ -282,17 +347,17 @@ function validateDateFilters(filters: DateFilterOptions): void {
  *
  * @param {Array<{ role: string; content: string }>} messages - An array of message objects.
  * @param {string} model - The model to use for the completion.
- * @param {DateFilterOptions} dateFilters - Optional date filtering parameters.
+ * @param {FilterOptions} filters - Optional filtering parameters for dates and domains.
  * @returns {Promise<string>} The chat completion result with appended citations.
  * @throws Will throw an error if the API request fails.
  */
 async function performChatCompletion(
   messages: Array<{ role: string; content: string }>,
   model: string = "sonar-pro",
-  dateFilters: DateFilterOptions = {}
+  filters: FilterOptions = {}
 ): Promise<string> {
-  // Validate date filters
-  validateDateFilters(dateFilters);
+  // Validate filters
+  validateFilters(filters);
   
   // Construct the API endpoint URL and request body
   const url = new URL("https://api.perplexity.ai/chat/completions");
@@ -301,21 +366,24 @@ async function performChatCompletion(
     messages: messages,
   };
   
-  // Add date filter parameters if provided
-  if (dateFilters.search_after_date_filter) {
-    body.search_after_date_filter = dateFilters.search_after_date_filter;
+  // Add filter parameters if provided
+  if (filters.search_after_date_filter) {
+    body.search_after_date_filter = filters.search_after_date_filter;
   }
-  if (dateFilters.search_before_date_filter) {
-    body.search_before_date_filter = dateFilters.search_before_date_filter;
+  if (filters.search_before_date_filter) {
+    body.search_before_date_filter = filters.search_before_date_filter;
   }
-  if (dateFilters.last_updated_after_filter) {
-    body.last_updated_after_filter = dateFilters.last_updated_after_filter;
+  if (filters.last_updated_after_filter) {
+    body.last_updated_after_filter = filters.last_updated_after_filter;
   }
-  if (dateFilters.last_updated_before_filter) {
-    body.last_updated_before_filter = dateFilters.last_updated_before_filter;
+  if (filters.last_updated_before_filter) {
+    body.last_updated_before_filter = filters.last_updated_before_filter;
   }
-  if (dateFilters.search_recency_filter) {
-    body.search_recency_filter = dateFilters.search_recency_filter;
+  if (filters.search_recency_filter) {
+    body.search_recency_filter = filters.search_recency_filter;
+  }
+  if (filters.search_domain_filter && filters.search_domain_filter.length > 0) {
+    body.search_domain_filter = filters.search_domain_filter;
   }
 
   let response;
@@ -402,13 +470,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error("No arguments provided");
     }
     
-    // Extract date filter parameters from arguments
-    const dateFilters: DateFilterOptions = {
+    // Extract filter parameters from arguments
+    const filters: FilterOptions = {
       search_after_date_filter: args.search_after_date_filter as string | undefined,
       search_before_date_filter: args.search_before_date_filter as string | undefined,
       last_updated_after_filter: args.last_updated_after_filter as string | undefined,
       last_updated_before_filter: args.last_updated_before_filter as string | undefined,
       search_recency_filter: args.search_recency_filter as "day" | "week" | "month" | "year" | undefined,
+      search_domain_filter: args.search_domain_filter as string[] | undefined,
     };
     
     switch (name) {
@@ -416,9 +485,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!Array.isArray(args.messages)) {
           throw new Error("Invalid arguments for perplexity_ask: 'messages' must be an array");
         }
-        // Invoke the chat completion function with the provided messages and date filters
+        // Invoke the chat completion function with the provided messages and filters
         const messages = args.messages;
-        const result = await performChatCompletion(messages, "sonar-pro", dateFilters);
+        const result = await performChatCompletion(messages, "sonar-pro", filters);
         return {
           content: [{ type: "text", text: result }],
           isError: false,
@@ -428,9 +497,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!Array.isArray(args.messages)) {
           throw new Error("Invalid arguments for perplexity_research: 'messages' must be an array");
         }
-        // Invoke the chat completion function with the provided messages using the deep research model and date filters
+        // Invoke the chat completion function with the provided messages using the deep research model and filters
         const messages = args.messages;
-        const result = await performChatCompletion(messages, "sonar-deep-research", dateFilters);
+        const result = await performChatCompletion(messages, "sonar-deep-research", filters);
         return {
           content: [{ type: "text", text: result }],
           isError: false,
@@ -440,9 +509,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!Array.isArray(args.messages)) {
           throw new Error("Invalid arguments for perplexity_reason: 'messages' must be an array");
         }
-        // Invoke the chat completion function with the provided messages using the reasoning model and date filters
+        // Invoke the chat completion function with the provided messages using the reasoning model and filters
         const messages = args.messages;
-        const result = await performChatCompletion(messages, "sonar-reasoning-pro", dateFilters);
+        const result = await performChatCompletion(messages, "sonar-reasoning-pro", filters);
         return {
           content: [{ type: "text", text: result }],
           isError: false,

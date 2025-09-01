@@ -1,6 +1,6 @@
 # Perplexity Ask MCP Server
 
-An MCP server implementation that integrates the Sonar API to provide Claude with unparalleled real-time, web-wide research capabilities, now enhanced with advanced date filtering options.
+An MCP server implementation that integrates the Sonar API to provide Claude with unparalleled real-time, web-wide research capabilities, now enhanced with advanced date filtering and domain filtering options.
 
 Please refer to the official [DeepWiki page](https://deepwiki.com/ppl-ai/modelcontextprotocol) for assistance with implementation. 
 
@@ -27,14 +27,19 @@ Please refer to the official [DeepWiki page](https://deepwiki.com/ppl-ai/modelco
     - `last_updated_after_filter` (string): Filter to content updated after this date (format: M/D/YYYY)
     - `last_updated_before_filter` (string): Filter to content updated before this date (format: M/D/YYYY)
     - `search_recency_filter` (string): Filter by predefined periods ("day", "week", "month", "year")
+  - **Domain Filtering Options** (optional):
+    - `search_domain_filter` (array): Filter search results by domain or URL
+      - Allowlist mode: `["wikipedia.org", "github.com"]` - Include only these domains
+      - Denylist mode: `["-reddit.com", "-quora.com"]` - Exclude these domains
+      - Supports up to 20 entries, can mix domains and specific URLs
 
 ### **perplexity_research**
 - Perform deep research queries using the Perplexity API with comprehensive analysis.
-- **Inputs:** Same as `perplexity_ask` including all date filtering options.
+- **Inputs:** Same as `perplexity_ask` including all date and domain filtering options.
 
 ### **perplexity_reason**
 - Execute advanced reasoning tasks with enhanced analytical capabilities.
-- **Inputs:** Same as `perplexity_ask` including all date filtering options.
+- **Inputs:** Same as `perplexity_ask` including all date and domain filtering options.
 
 ## Date Filtering Features
 
@@ -51,6 +56,31 @@ Filter results based on when content was last modified:
 ### Recency Filter
 Quick filtering by predefined time periods relative to the current date:
 - `search_recency_filter`: Use "day", "week", "month", or "year" for convenience
+
+## Domain Filtering Features
+
+Control which websites are included or excluded from search results:
+
+### Allowlist Mode
+Include only specified domains/URLs:
+```json
+"search_domain_filter": ["wikipedia.org", "github.com", "stackoverflow.com"]
+```
+
+### Denylist Mode  
+Exclude specified domains/URLs (use `-` prefix):
+```json
+"search_domain_filter": ["-reddit.com", "-pinterest.com", "-quora.com"]
+```
+
+### URL-Level Filtering
+Target specific pages for granular control:
+```json
+"search_domain_filter": [
+  "https://docs.python.org/3/tutorial/",
+  "https://en.wikipedia.org/wiki/Machine_learning"
+]
+```
 
 ### Filter Usage Examples
 
@@ -89,10 +119,42 @@ Quick filtering by predefined time periods relative to the current date:
 }
 ```
 
+5. **Search only trusted academic sources:**
+```json
+{
+  "messages": [{"role": "user", "content": "AI research papers"}],
+  "search_domain_filter": ["arxiv.org", "nature.com", "science.org"]
+}
+```
+
+6. **Exclude social media and forums:**
+```json
+{
+  "messages": [{"role": "user", "content": "Programming tutorials"}],
+  "search_domain_filter": ["-reddit.com", "-quora.com", "-pinterest.com"]
+}
+```
+
+7. **Target specific documentation with recent updates:**
+```json
+{
+  "messages": [{"role": "user", "content": "React hooks documentation"}],
+  "search_domain_filter": ["https://react.dev/docs/hooks", "github.com/facebook/react"],
+  "last_updated_after_filter": "1/1/2025"
+}
+```
+
 ### Important Notes
-- Date format must be exactly M/D/YYYY (e.g., "3/1/2025" or "03/01/2025")
-- `search_recency_filter` cannot be combined with other date filters
-- All date filters are optional and can be used independently or together (except recency filter)
+- **Date filters:**
+  - Date format must be exactly M/D/YYYY (e.g., "3/1/2025" or "03/01/2025")
+  - `search_recency_filter` cannot be combined with other date filters
+  - All date filters are optional and can be used independently or together (except recency filter)
+- **Domain filters:**
+  - Maximum 20 domains/URLs per filter
+  - Cannot mix allowlist and denylist modes in the same request
+  - Use simple domain names (`example.com`) for broad filtering
+  - Use complete URLs (`https://example.com/page`) for specific page targeting
+  - Domain filtering applies to all subdomains (e.g., `nytimes.com` includes all subdomains)
 
 ## Configuration
 
