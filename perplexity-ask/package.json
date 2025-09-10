@@ -32,11 +32,12 @@
     "watch": "tsc --watch"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.17.5",
     "axios": "^1.6.2",
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^20",
     "shx": "^0.3.4",
     "typescript": "^5.6.2"
