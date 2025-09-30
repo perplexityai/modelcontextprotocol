@@ -20,19 +20,19 @@ Claude: "Based on recent search results, here are the latest developments..."
 
 Click the Research button and ensure "perplexity-search" is toggled on:
 
-![MCP Tools Menu](./assets/mcp-tools-menu.png)
+![MCP Tools Menu](./perplexity-search/assets/mcp-tools-menu.png)
 
 **2. Grant Permission**
 
 When Claude wants to search, you'll see a permission dialog showing the query:
 
-![Permission Dialog](./assets/permission-dialog.png)
+![Permission Dialog](./perplexity-search/assets/permission-dialog.png)
 
 **3. Get Results**
 
 Claude receives real-time search results with citations:
 
-![Search Results](./assets/search-results.png)
+![Search Results](./perplexity-search/assets/search-results.png)
 
 ## Overview
 
@@ -314,6 +314,10 @@ Learn more at:
 ```
 perplexity-search-mcp/
 ├── perplexity-search/
+│   ├── assets/            # Documentation images
+│   │   ├── mcp-tools-menu.png
+│   │   ├── permission-dialog.png
+│   │   └── search-results.png
 │   ├── dist/              # Compiled JavaScript (gitignored)
 │   ├── node_modules/      # Dependencies (gitignored)
 │   ├── Dockerfile         # Docker container configuration
@@ -326,10 +330,6 @@ perplexity-search-mcp/
 │   ├── .env.local         # Local environment variables (gitignored)
 │   └── .env.local.example # Environment template
 ├── .gitignore             # Git ignore rules
-├── assets/                # Documentation images
-│   ├── mcp-tools-menu.png
-│   ├── permission-dialog.png
-│   └── search-results.png
 ├── LICENSE                # MIT License
 └── README.md              # This file
 ```
