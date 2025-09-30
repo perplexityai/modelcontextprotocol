@@ -10,7 +10,7 @@ Once configured, Claude can perform real-time web searches directly within your 
 
 ```
 You: "What are the latest AI developments in 2025?"
-Claude: [Uses perplexity_search tool]
+Claude: [Uses perplexity-search tool]
 Claude: "Based on recent search results, here are the latest developments..."
 ```
 
@@ -78,7 +78,7 @@ The Search API powers products with unparalleled real-time, web-wide research ca
 
 ## Tools
 
-### perplexity_search
+### perplexity-search
 
 Performs web search using the Perplexity Search API and returns ranked search results.
 
@@ -226,7 +226,7 @@ notepad %APPDATA%\Claude\claude_desktop_config.json
 1. Open Claude Desktop
 2. Look for the hammer icon (🔨) in the interface
 3. Click it to see available MCP tools
-4. You should see `perplexity_search` listed
+4. You should see `perplexity-search` listed
 
 If the tool appears, the integration is active and Claude can now perform web searches via Perplexity!
 

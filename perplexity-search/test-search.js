@@ -2,7 +2,7 @@
 
 /**
  * Test script for Perplexity Search MCP Server
- * Tests the perplexity_search tool with a sample query
+ * Tests the perplexity-search tool with a sample query
  */
 
 import { spawn } from 'child_process';
@@ -55,7 +55,7 @@ server.on('error', (err) => {
 
 // Wait for server to initialize
 setTimeout(() => {
-  console.log('=== Calling perplexity_search tool ===');
+  console.log('=== Calling perplexity-search tool ===');
   console.log('Query: "catswithbats"\n');
 
   // Send tool call request
@@ -64,7 +64,7 @@ setTimeout(() => {
     id: 2,
     method: 'tools/call',
     params: {
-      name: 'perplexity_search',
+      name: 'perplexity-search',
       arguments: {
         query: 'catswithbats',
         max_results: 5

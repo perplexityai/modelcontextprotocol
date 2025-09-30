@@ -13,7 +13,7 @@ import {
  * This tool performs web search using the Perplexity Search API.
  */
 const PERPLEXITY_SEARCH_TOOL: Tool = {
-  name: "perplexity_search",
+  name: "perplexity-search",
   description:
     "Performs web search using the Perplexity Search API. " +
     "Returns ranked search results with titles, URLs, snippets, and metadata. " +
@@ -211,19 +211,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error("No arguments provided");
     }
     switch (name) {
-      case "perplexity_search": {
+      case "perplexity-search": {
         // Validate query is string or string array
         if (typeof args.query !== "string" && !Array.isArray(args.query)) {
-          throw new Error("Invalid arguments for perplexity_search: 'query' must be a string or array of strings");
+          throw new Error("Invalid arguments for perplexity-search: 'query' must be a string or array of strings");
         }
 
         // Validate array elements are strings
         if (Array.isArray(args.query)) {
           if (!args.query.every((q: any) => typeof q === "string")) {
-            throw new Error("Invalid arguments for perplexity_search: all query array elements must be strings");
+            throw new Error("Invalid arguments for perplexity-search: all query array elements must be strings");
           }
           if (args.query.length > 5) {
-            throw new Error("Invalid arguments for perplexity_search: maximum of 5 queries allowed");
+            throw new Error("Invalid arguments for perplexity-search: maximum of 5 queries allowed");
           }
         }
 
