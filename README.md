@@ -317,11 +317,14 @@ perplexity-search-mcp/
 │   ├── dist/              # Compiled JavaScript (gitignored)
 │   ├── index.ts           # Main MCP server implementation
 │   ├── test-search.js     # Test script for search functionality
+│   ├── Dockerfile         # Docker container configuration
 │   ├── package.json       # Node.js package configuration
+│   ├── pnpm-lock.yaml     # pnpm lock file for reproducible builds
 │   ├── tsconfig.json      # TypeScript configuration
 │   ├── .env.local         # Local environment variables (gitignored)
-│   ├── .env.local.example # Environment template
-│   └── .gitignore         # Git ignore rules
+│   └── .env.local.example # Environment template
+├── .gitignore             # Git ignore rules
+├── assets/                # Documentation images
 ├── README.md              # This file
 └── LICENSE                # MIT License
 ```

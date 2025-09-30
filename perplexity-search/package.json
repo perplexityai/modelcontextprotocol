@@ -8,16 +8,16 @@
     "mcp",
     "modelcontextprotocol"
   ],
-  "homepage": "https://modelcontextprotocol.io",
+  "homepage": "https://github.com/agenisea/perplexity-search-mcp",
   "bugs": {
-    "url": "https://github.com/modelcontextprotocol/servers/issues"
+    "url": "https://github.com/agenisea/perplexity-search-mcp/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/modelcontextprotocol/servers.git"
+    "url": "git+https://github.com/agenisea/perplexity-search-mcp.git"
   },
   "license": "MIT",
-  "author": "Model Context Protocol (https://modelcontextprotocol.io)",
+  "author": "agenisea",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -28,7 +28,7 @@
   ],
   "scripts": {
     "build": "tsc && shx chmod +x dist/*.js",
-    "prepare": "npm run build",
+    "prepare": "pnpm run build",
     "watch": "tsc --watch",
     "dev": "node -r dotenv/config dist/index.js dotenv_config_path=.env.local",
     "start": "node dist/index.js"
