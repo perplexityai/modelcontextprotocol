@@ -101,7 +101,7 @@ Formatted search results including:
 ### Prerequisites
 
 - Node.js >= 18
-- pnpm (recommended) or npm
+- pnpm
 - Perplexity API key
 
 ### Step 1: Clone and Install
@@ -199,25 +199,16 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
-### Using NPX (Coming Soon)
+### Using Docker
 
-> **Note:** NPM package publication is planned for future release. For now, use the Node.js direct method above.
+Build and run with Docker:
 
-```json
-{
-  "mcpServers": {
-    "perplexity-search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@agenisea/perplexity-search-mcp"
-      ],
-      "env": {
-        "PERPLEXITY_API_KEY": "YOUR_API_KEY_HERE"
-      }
-    }
-  }
-}
+```bash
+# Build the Docker image
+docker build -t perplexity-search-mcp perplexity-search/
+
+# Run the container
+docker run -i --rm -e PERPLEXITY_API_KEY=your_api_key_here perplexity-search-mcp
 ```
 
 Access the config file:
