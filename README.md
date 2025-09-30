@@ -315,18 +315,23 @@ Learn more at:
 perplexity-search-mcp/
 ├── perplexity-search/
 │   ├── dist/              # Compiled JavaScript (gitignored)
-│   ├── index.ts           # Main MCP server implementation
-│   ├── test-search.js     # Test script for search functionality
+│   ├── node_modules/      # Dependencies (gitignored)
 │   ├── Dockerfile         # Docker container configuration
+│   ├── index.ts           # Main MCP server implementation
 │   ├── package.json       # Node.js package configuration
+│   ├── package-lock.json  # npm lock file for reproducible builds
 │   ├── pnpm-lock.yaml     # pnpm lock file for reproducible builds
+│   ├── test-search.js     # Test script for search functionality
 │   ├── tsconfig.json      # TypeScript configuration
 │   ├── .env.local         # Local environment variables (gitignored)
 │   └── .env.local.example # Environment template
 ├── .gitignore             # Git ignore rules
 ├── assets/                # Documentation images
-├── README.md              # This file
-└── LICENSE                # MIT License
+│   ├── mcp-tools-menu.png
+│   ├── permission-dialog.png
+│   └── search-results.png
+├── LICENSE                # MIT License
+└── README.md              # This file
 ```
 
 ## Development Scripts
