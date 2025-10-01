@@ -55,3 +55,6 @@ coverage.xml
 *.csv
 *.tsv
 *.jsonl
+
+# Documentation (not needed in container)
+CLAUDE.md

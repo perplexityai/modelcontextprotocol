@@ -31,14 +31,20 @@
     "prepare": "pnpm run build",
     "watch": "tsc --watch",
     "dev": "node -r dotenv/config dist/index.js dotenv_config_path=.env.local",
-    "start": "node dist/index.js"
+    "dev:server": "node -r dotenv/config dist/server.js dotenv_config_path=.env.local",
+    "start": "node dist/index.js",
+    "start:server": "node dist/server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.1",
-    "axios": "^1.6.2",
-    "dotenv": "^16.3.1"
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/node": "^20",
     "shx": "^0.3.4",
     "typescript": "5.9.2"

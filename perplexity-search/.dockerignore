@@ -1,0 +1,40 @@
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation (not needed in container)
+CLAUDE.md
+README.md
+DEPLOYMENT.md
+
+# Tests
+test-*.js
+*.test.ts
+*.spec.ts
+
+# Stdio server (not needed for HTTP deployment)
+index.ts
