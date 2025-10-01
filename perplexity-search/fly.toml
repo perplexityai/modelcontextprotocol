@@ -1,36 +1,30 @@
-# Fly.io configuration for private MCP Perplexity Search server
-# This configuration creates a FULLY PRIVATE app with NO public ports
-# Only accessible via:
-#   - Fly's private .internal network from other Fly apps
-#   - WireGuard VPN tunnel for local development
+# fly.toml app configuration file generated for perplexity-search-mcp-private on 2025-09-30T19:14:51-07:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "perplexity-search-mcp-private"
-primary_region = "sjc"
+app = 'perplexity-search-mcp-private'
+primary_region = 'sjc'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
-# No [http_service] section = no public HTTP/HTTPS exposure
-# No [[services]] section = no public ports at all
+[deploy]
+  strategy = 'rolling'
 
 [env]
-  PORT = "8080"
-  NODE_ENV = "production"
+  NODE_ENV = 'production'
+  PORT = '8080'
 
-# Health checks run over Fly's internal network
 [checks]
   [checks.health]
-    type = "http"
     port = 8080
-    interval = "15s"
-    timeout = "2s"
-    method = "GET"
-    path = "/health"
-    grace_period = "10s"
-
-# Resource allocation
-[deploy]
-  strategy = "rolling"
+    type = 'http'
+    interval = '15s'
+    timeout = '2s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/health'
 
 [[vm]]
   memory = '512mb'
