@@ -217,7 +217,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Root endpoint - welcome page
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_: Request, res: Response) => {
   res.json({
     name: 'Perplexity Search MCP Server',
     version: '1.0.0',
@@ -235,13 +235,13 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // Health check endpoint (no auth required for health checks)
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // MCP registration handshake endpoint
 // Claude's MCP client sends a POST to /register before calling /mcp/tools
-app.post('/register', basicAuth, (req: Request, res: Response) => {
+app.post('/register', basicAuth, (_: Request, res: Response) => {
   res.json({
     ok: true,
     protocol: 'mcp-http',
@@ -354,7 +354,7 @@ app.post('/mcp', basicAuth, async (req: Request, res: Response) => {
 });
 
 // MCP endpoints with authentication
-app.get('/mcp/tools', basicAuth, (req: Request, res: Response) => {
+app.get('/mcp/tools', basicAuth, (_: Request, res: Response) => {
   res.json({
     tools: [PERPLEXITY_SEARCH_TOOL],
   });
