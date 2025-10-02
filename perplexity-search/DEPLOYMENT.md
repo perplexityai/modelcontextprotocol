@@ -2,6 +2,54 @@
 
 This guide covers deploying the MCP Perplexity Search server as a **fully private service** on Fly.io with **no public ports**.
 
+## 🚀 Quick Start
+
+**Essential commands to get up and running:**
+
+```bash
+# 1. Install Fly CLI (if not already installed)
+curl -L https://fly.io/install.sh | sh
+
+# 2. Login to Fly.io
+fly auth login
+
+# 3. Create app (don't deploy yet)
+cd perplexity-search
+fly launch --no-deploy
+
+# 4. Set secrets
+fly secrets set \
+  PERPLEXITY_API_KEY="pplx-xxxxx" \
+  MCP_USER="changepilot" \
+  MCP_PASS="$(openssl rand -base64 32)"
+
+# 5. Deploy
+fly deploy
+
+# 6. Test (via WireGuard or from another Fly app)
+curl http://perplexity-search-mcp-private.internal:8080/health
+```
+
+**Quick test from another Fly app:**
+```typescript
+const auth = Buffer.from('changepilot:your-password').toString('base64');
+const response = await fetch('http://perplexity-search-mcp-private.internal:8080/mcp', {
+  method: 'POST',
+  headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 })
+});
+```
+
+**Common management commands:**
+```bash
+fly logs              # View logs
+fly status            # Check status
+fly restart           # Restart app
+fly secrets list      # View secrets
+```
+
+---
+
 ## Architecture Overview
 
 - **`index.ts`**: Stdio-based MCP server for local Claude Desktop use (not deployed)
@@ -129,7 +177,30 @@ For local development and testing:
 
 ## API Endpoints
 
-All endpoints require Basic Authentication.
+All endpoints require Basic Authentication (except health check and root endpoint).
+
+### Root Endpoint (No Auth)
+```bash
+GET /
+```
+
+Returns server information:
+```json
+{
+  "name": "Perplexity Search MCP Server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for Perplexity Search API",
+  "endpoints": {
+    "health": "/health",
+    "mcp": "/mcp",
+    "register": "/register",
+    "tools": "/mcp/tools",
+    "call": "/mcp/call"
+  },
+  "authentication": "Basic Auth",
+  "status": "running"
+}
+```
 
 ### Health Check (No Auth)
 ```bash
@@ -144,7 +215,74 @@ Returns:
 }
 ```
 
-### List Tools
+### MCP Protocol Endpoint (Primary)
+```bash
+POST /mcp
+Authorization: Basic <base64-encoded-credentials>
+Content-Type: application/json
+```
+
+**Initialize Protocol:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "initialize",
+  "id": 1,
+  "params": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {},
+    "clientInfo": {"name": "client", "version": "1.0.0"}
+  }
+}
+```
+
+**List Tools:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/list",
+  "id": 2
+}
+```
+
+**Call Tool:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "id": 3,
+  "params": {
+    "name": "perplexity-search",
+    "arguments": {
+      "query": "latest AI developments",
+      "max_results": 10
+    }
+  }
+}
+```
+
+### MCP Registration Endpoint
+```bash
+POST /register
+Authorization: Basic <base64-encoded-credentials>
+```
+
+Returns:
+```json
+{
+  "ok": true,
+  "protocol": "mcp-http",
+  "version": "0.1.0",
+  "server": {
+    "name": "perplexity-search-mcp",
+    "version": "1.0.0"
+  }
+}
+```
+
+### Legacy Endpoints (Maintained for Compatibility)
+
+#### List Tools
 ```bash
 GET /mcp/tools
 Authorization: Basic <base64-encoded-credentials>
@@ -163,7 +301,7 @@ Returns:
 }
 ```
 
-### Call Tool
+#### Call Tool
 ```bash
 POST /mcp/call
 Authorization: Basic <base64-encoded-credentials>
@@ -191,6 +329,24 @@ Returns:
 }
 ```
 
+## Rate Limiting
+
+The server implements rate limiting to prevent abuse:
+
+- **Limit**: 100 requests per IP address per 15-minute window
+- **Response**: JSON error with retry information
+- **Headers**: Standard rate limit headers included
+
+When rate limited, you'll receive:
+```json
+{
+  "error": "Too many requests from this IP, please try again later.",
+  "retryAfter": 900000
+}
+```
+
+Where `retryAfter` is milliseconds until reset (15 minutes = 900,000ms).
+
 ## Testing the Deployment
 
 ### Test from Another Fly App
@@ -200,44 +356,140 @@ Create a simple test script in your other Fly app:
 ```typescript
 // test-mcp.ts
 const auth = Buffer.from('changepilot:your-secure-password').toString('base64');
+const baseUrl = 'http://perplexity-search-mcp-private.internal:8080';
 
-// Test tools endpoint
-const toolsResponse = await fetch('http://perplexity-search-mcp-private.internal:8080/mcp/tools', {
-  headers: { 'Authorization': `Basic ${auth}` }
-});
-console.log('Tools:', await toolsResponse.json());
+// Test server info (no auth)
+const infoResponse = await fetch(`${baseUrl}/`);
+console.log('Server Info:', await infoResponse.json());
 
-// Test search
-const searchResponse = await fetch('http://perplexity-search-mcp-private.internal:8080/mcp/call', {
+// Test health check (no auth)
+const healthResponse = await fetch(`${baseUrl}/health`);
+console.log('Health:', await healthResponse.json());
+
+// Test MCP protocol initialization
+const initResponse = await fetch(`${baseUrl}/mcp`, {
   method: 'POST',
   headers: {
     'Authorization': `Basic ${auth}`,
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    name: 'perplexity-search',
-    arguments: {
-      query: 'test query',
-      max_results: 5
+    jsonrpc: '2.0',
+    method: 'initialize',
+    id: 1,
+    params: {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'test-client', version: '1.0.0' }
+    }
+  })
+});
+console.log('Initialize:', await initResponse.json());
+
+// Test tools list via MCP protocol
+const toolsResponse = await fetch(`${baseUrl}/mcp`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Basic ${auth}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'tools/list',
+    id: 2
+  })
+});
+console.log('Tools:', await toolsResponse.json());
+
+// Test search via MCP protocol
+const searchResponse = await fetch(`${baseUrl}/mcp`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Basic ${auth}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'tools/call',
+    id: 3,
+    params: {
+      name: 'perplexity-search',
+      arguments: {
+        query: 'test query',
+        max_results: 5
+      }
     }
   })
 });
 console.log('Results:', await searchResponse.json());
+
+// Test legacy endpoints for compatibility
+const legacyToolsResponse = await fetch(`${baseUrl}/mcp/tools`, {
+  headers: { 'Authorization': `Basic ${auth}` }
+});
+console.log('Legacy Tools:', await legacyToolsResponse.json());
 ```
 
 ### Test via WireGuard
 
 ```bash
 # Connect to WireGuard first, then:
+BASE_URL="http://perplexity-search-mcp-private.internal:8080"
+
+# Test server info (no auth)
+curl "$BASE_URL/"
 
 # Test health check (no auth)
-curl http://perplexity-search-mcp-private.internal:8080/health
+curl "$BASE_URL/health"
 
-# Test tools endpoint
+# Test MCP protocol initialization
 curl -u changepilot:your-secure-password \
-  http://perplexity-search-mcp-private.internal:8080/mcp/tools
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "id": 1,
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {},
+      "clientInfo": {"name": "curl-client", "version": "1.0.0"}
+    }
+  }' \
+  "$BASE_URL/mcp"
 
-# Test search
+# Test tools list via MCP protocol
+curl -u changepilot:your-secure-password \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/list",
+    "id": 2
+  }' \
+  "$BASE_URL/mcp"
+
+# Test search via MCP protocol
+curl -u changepilot:your-secure-password \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "id": 3,
+    "params": {
+      "name": "perplexity-search",
+      "arguments": {
+        "query": "artificial intelligence news",
+        "max_results": 5
+      }
+    }
+  }' \
+  "$BASE_URL/mcp"
+
+# Test legacy endpoints for compatibility
+curl -u changepilot:your-secure-password "$BASE_URL/mcp/tools"
+
 curl -u changepilot:your-secure-password \
   -X POST \
   -H "Content-Type: application/json" \
@@ -248,7 +500,7 @@ curl -u changepilot:your-secure-password \
       "max_results": 5
     }
   }' \
-  http://perplexity-search-mcp-private.internal:8080/mcp/call
+  "$BASE_URL/mcp/call"
 ```
 
 ## Updating the Deployment

@@ -60,11 +60,57 @@ The Search API powers products with unparalleled real-time, web-wide research ca
 
 ## Tech Stack
 
-- **TypeScript**: Type-safe server implementation
-- **Model Context Protocol (MCP) SDK**: Official SDK for building MCP servers
-- **Perplexity Search API**: Real-time web search with advanced filtering
-- **Node.js**: Runtime environment (v18+)
-- **pnpm**: Fast, disk-efficient package manager
+This project is built with modern, well-documented technologies. Each component includes links to official documentation for deeper learning and troubleshooting.
+
+### Core Technologies
+
+- **[TypeScript](https://www.typescriptlang.org/docs/)**: Type-safe server implementation with strict typing
+  - [TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/intro.html) - Comprehensive language guide
+  - [Latest Release Notes](https://devblogs.microsoft.com/typescript/) - Stay updated with new features
+
+- **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/sdk)**: Official SDK for building MCP servers
+  - [MCP Specification](https://github.com/modelcontextprotocol/modelcontextprotocol) - Protocol specification and schema
+  - [TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) - Official TypeScript implementation
+  - [MCP Documentation](https://modelcontextprotocol.io) - Complete guides and tutorials
+
+- **[Perplexity Search API](https://docs.perplexity.ai)**: Real-time web search with advanced filtering
+  - [Search API Guide](https://docs.perplexity.ai/guides/search-guide) - Complete implementation guide
+  - [API Reference](https://docs.perplexity.ai/api-reference/search-post) - Detailed endpoint documentation
+  - [API Pricing](https://www.perplexity.ai/settings/api) - Current rates and limits
+
+### Runtime & Package Management
+
+- **[Node.js v18+](https://nodejs.org/download/release/v18.18.2/)**: JavaScript runtime environment
+  - [Node.js Documentation](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/) - Installation and setup
+  - [Node.js v18 Release Notes](https://nodejs.org/en/blog/announcements/v18-release-announce) - New features and improvements
+
+- **[pnpm](https://pnpm.io)**: Fast, disk-efficient package manager
+  - [pnpm Installation](https://pnpm.io/installation) - Setup guide for all platforms
+  - [pnpm Documentation](https://pnpm.io/motivation) - Why pnpm and how it works
+  - [GitHub Repository](https://github.com/pnpm/pnpm) - Source code and issue tracking
+
+### Development & Deployment
+
+- **[Express.js](https://expressjs.com)**: Web application framework for HTTP server mode
+  - [Express.js Guide](https://expressjs.com/en/guide/routing.html) - Routing and middleware
+  - [Express.js API Reference](https://expressjs.com/en/4x/api.html) - Complete API documentation
+  - [Express.js Tutorial](https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Server-side/Express_Nodejs/Introduction) - MDN learning guide
+
+- **[Docker](https://docs.docker.com)**: Containerization for deployment
+  - [Docker Get Started](https://www.docker.com/get-started/) - Installation and basic usage
+  - [Docker Documentation](https://docs.docker.com) - Complete reference and guides
+
+- **[Fly.io](https://fly.io/docs/launch/deploy/)**: Cloud deployment platform
+  - [Fly.io Deploy Guide](https://fly.io/docs/launch/deploy/) - Application deployment
+  - [Fly.io CLI Reference](https://fly.io/docs/flyctl/deploy/) - Command-line tools
+
+### Integration
+
+- **[Claude Desktop](https://www.anthropic.com/engineering/desktop-extensions)**: MCP client integration
+  - [Claude MCP Setup Guide](https://generect.com/blog/claude-mcp/) - Complete integration tutorial
+  - [MCP Server Configuration](https://www.getmesa.com/blog/how-to-connect-mcp-server-claude/) - Advanced setup patterns
+
+> **Quick Reference**: For troubleshooting and advanced configuration, see our [DEPLOYMENT.md](perplexity-search/DEPLOYMENT.md) which includes platform-specific deployment guides and troubleshooting steps.
 
 ## Features
 
@@ -149,24 +195,36 @@ pnpm run build
 
 ### Local Development
 
-Run the server locally with environment variables loaded:
-
+**Stdio MCP Server** (for direct MCP client connections):
 ```bash
 pnpm run dev
 ```
 
+**HTTP Server** (for HTTP-based MCP clients like Claude Code):
+```bash
+pnpm run dev:server
+```
+
 ### Production
 
-Run without dotenv (requires environment variables set externally):
-
+**Stdio MCP Server**:
 ```bash
 pnpm run start
 ```
 
-Or with explicit environment variable:
+**HTTP Server**:
+```bash
+pnpm run start:server
+```
+
+Or with explicit environment variables:
 
 ```bash
+# Stdio server
 PERPLEXITY_API_KEY=your_api_key node dist/index.js
+
+# HTTP server
+PERPLEXITY_API_KEY=your_api_key node dist/server.js
 ```
 
 ### Testing
@@ -179,7 +237,7 @@ node test-search.js
 
 ## Claude Desktop Configuration
 
-### Using Node.js directly
+### Method 1: Stdio MCP Server (Local)
 
 Add this to your `claude_desktop_config.json`:
 
@@ -199,6 +257,159 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
+### Method 2: HTTP MCP Server (Local or Remote)
+
+For HTTP-based connections (useful for Claude Code or remote deployments):
+
+```json
+{
+  "mcpServers": {
+    "perplexity-search": {
+      "url": "http://localhost:8080/mcp",
+      "auth": {
+        "type": "basic",
+        "username": "your_username",
+        "password": "your_password"
+      }
+    }
+  }
+}
+```
+
+Set these environment variables for the HTTP server:
+```bash
+PERPLEXITY_API_KEY=your_api_key_here
+MCP_USER=your_username
+MCP_PASS=your_password
+```
+
+### Method 3: Remote Deployment
+
+The project is pre-configured for Fly.io deployment but can be adapted for other cloud platforms.
+
+#### Fly.io Deployment (Default Configuration)
+
+The project includes `fly.toml` and `Dockerfile` configured for **private internal deployment**. The server is not exposed to the public internet and uses internal networking for security.
+
+**Quick Start:**
+```bash
+# Deploy to Fly.io (private internal configuration)
+fly deploy
+
+# Set environment variables
+fly secrets set PERPLEXITY_API_KEY=your_api_key_here
+fly secrets set MCP_USER=your_username
+fly secrets set MCP_PASS=your_password
+```
+
+**Security Note**: The default configuration uses Fly.io's internal network (`*.internal`) for private access only. No public ports are exposed, making it suitable for secure MCP client connections.
+
+📖 **For complete deployment instructions, API documentation, and troubleshooting, see [DEPLOYMENT.md](perplexity-search/DEPLOYMENT.md)**
+
+Then configure Claude to use your deployed server:
+```json
+{
+  "mcpServers": {
+    "perplexity-search": {
+      "url": "https://your-app.fly.dev/mcp",
+      "auth": {
+        "type": "basic",
+        "username": "your_username",
+        "password": "your_password"
+      }
+    }
+  }
+}
+```
+
+#### AWS Deployment (Alternative)
+
+To deploy to AWS with similar private network security, modify the configuration:
+
+**AWS ECS/Fargate:**
+1. Build and push Docker image to ECR:
+```bash
+# Build for AWS
+docker build -t perplexity-search-mcp .
+docker tag perplexity-search-mcp:latest your-account.dkr.ecr.region.amazonaws.com/perplexity-search-mcp:latest
+docker push your-account.dkr.ecr.region.amazonaws.com/perplexity-search-mcp:latest
+```
+
+2. Create ECS task definition with environment variables and private networking:
+```json
+{
+  "environment": [
+    {"name": "PERPLEXITY_API_KEY", "value": "your_api_key"},
+    {"name": "MCP_USER", "value": "your_username"},
+    {"name": "MCP_PASS", "value": "your_password"},
+    {"name": "PORT", "value": "8080"}
+  ],
+  "networkMode": "awsvpc"
+}
+```
+
+**Note**: Deploy in private subnets with security groups allowing only necessary MCP client access.
+
+**AWS Lambda (with serverless framework):**
+1. Install serverless framework and create `serverless.yml`:
+```yaml
+service: perplexity-search-mcp
+provider:
+  name: aws
+  runtime: nodejs18.x
+  environment:
+    PERPLEXITY_API_KEY: ${env:PERPLEXITY_API_KEY}
+    MCP_USER: ${env:MCP_USER}
+    MCP_PASS: ${env:MCP_PASS}
+functions:
+  app:
+    handler: dist/lambda.handler
+    events:
+      - http:
+          path: /{proxy+}
+          method: ANY
+```
+
+2. Create Lambda handler wrapper (`lambda.ts`):
+```typescript
+import serverlessExpress from '@vendia/serverless-express';
+import app from './server.js';
+export const handler = serverlessExpress({ app });
+```
+
+#### Other Cloud Platforms
+
+**Google Cloud Run (Private):**
+```bash
+gcloud run deploy perplexity-search-mcp \
+  --image gcr.io/your-project/perplexity-search-mcp \
+  --platform managed \
+  --no-allow-unauthenticated \
+  --ingress internal \
+  --set-env-vars PERPLEXITY_API_KEY=your_key,MCP_USER=user,MCP_PASS=pass
+```
+
+**Azure Container Instances:**
+```bash
+az container create \
+  --resource-group myResourceGroup \
+  --name perplexity-search-mcp \
+  --image your-registry/perplexity-search-mcp \
+  --environment-variables PERPLEXITY_API_KEY=your_key MCP_USER=user MCP_PASS=pass
+```
+
+**Heroku:**
+```bash
+# Create Heroku app
+heroku create your-app-name
+
+# Set environment variables
+heroku config:set PERPLEXITY_API_KEY=your_key MCP_USER=user MCP_PASS=pass
+
+# Deploy
+git push heroku main
+```
+
 ### Using Docker
 
 Build and run with Docker:
@@ -207,8 +418,15 @@ Build and run with Docker:
 # Build the Docker image
 docker build -t perplexity-search-mcp perplexity-search/
 
-# Run the container
+# Run the container (stdio mode)
 docker run -i --rm -e PERPLEXITY_API_KEY=your_api_key_here perplexity-search-mcp
+
+# Run the container (HTTP mode)
+docker run -p 8080:8080 --rm \
+  -e PERPLEXITY_API_KEY=your_api_key_here \
+  -e MCP_USER=your_username \
+  -e MCP_PASS=your_password \
+  perplexity-search-mcp node dist/server.js
 ```
 
 Access the config file:
@@ -320,8 +538,10 @@ perplexity-search-mcp/
 │   │   └── search-results.png
 │   ├── dist/              # Compiled JavaScript (gitignored)
 │   ├── node_modules/      # Dependencies (gitignored)
+│   ├── DEPLOYMENT.md      # Complete Fly.io deployment guide
 │   ├── Dockerfile         # Docker container configuration
-│   ├── index.ts           # Main MCP server implementation
+│   ├── index.ts           # Stdio MCP server implementation
+│   ├── server.ts          # HTTP MCP server implementation
 │   ├── package.json       # Node.js package configuration
 │   ├── package-lock.json  # npm lock file for reproducible builds
 │   ├── pnpm-lock.yaml     # pnpm lock file for reproducible builds
@@ -340,11 +560,17 @@ perplexity-search-mcp/
 # Build TypeScript to JavaScript
 pnpm run build
 
-# Run in development mode (loads .env.local)
+# Run stdio MCP server in development mode (loads .env.local)
 pnpm run dev
 
-# Run in production mode
+# Run HTTP server in development mode (loads .env.local)
+pnpm run dev:server
+
+# Run stdio MCP server in production mode
 pnpm run start
+
+# Run HTTP server in production mode
+pnpm run start:server
 
 # Watch mode for development
 pnpm run watch
@@ -376,7 +602,9 @@ Error: PERPLEXITY_API_KEY environment variable is required
 3. Check Claude's developer console for errors
 4. Ensure the server builds without errors (`pnpm run build`)
 
-For additional troubleshooting, refer to the [MCP Debugging Guide](https://modelcontextprotocol.io/docs/tools/debugging).
+For additional troubleshooting, refer to:
+- [DEPLOYMENT.md](perplexity-search/DEPLOYMENT.md) - Complete troubleshooting for Fly.io deployment
+- [MCP Debugging Guide](https://modelcontextprotocol.io/docs/tools/debugging) - General MCP debugging
 
 ## Security Best Practices
 
