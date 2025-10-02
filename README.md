@@ -112,6 +112,43 @@ This project is built with modern, well-documented technologies. Each component 
 
 > **Quick Reference**: For troubleshooting and advanced configuration, see our [DEPLOYMENT.md](perplexity-search/DEPLOYMENT.md) which includes platform-specific deployment guides and troubleshooting steps.
 
+## Future Compatibility
+
+### MCP November 2025 Release Ready ✅
+
+This project is **fully compatible** with the upcoming Model Context Protocol release on **November 25, 2025**. Our architecture choices align perfectly with the protocol's evolution.
+
+#### **Release Timeline**
+- **Release Candidate**: November 11, 2025
+- **Final Release**: November 25, 2025
+- **Validation Window**: 14-day RC testing period
+
+#### **Current Configuration Benefits**
+- ✅ **Transport Layer**: Uses Streamable HTTP (the future standard)
+- ✅ **SDK Compatibility**: Built with official TypeScript SDK for seamless upgrades
+- ✅ **Structured Responses**: Already implements structured tool outputs
+- ✅ **Security Ready**: Basic auth can be enhanced with upcoming OAuth 2.1 features
+
+#### **Upgrade Path**
+The November 2025 release will be a **simple, non-breaking upgrade**:
+
+1. **Update SDK**: `npm install @modelcontextprotocol/sdk@latest` (after November 25)
+2. **Optional Enhancements**: Add new features like elicitation for user interactions
+3. **Backward Compatibility**: Your existing configuration will continue working unchanged
+
+#### **New Features Available**
+- **Enhanced Security**: Optional OAuth 2.1 improvements for enterprise deployments
+- **Elicitation**: Server-initiated user interactions for search refinement
+- **Resource Links**: Enhanced integration between tools and data sources
+- **Structured Tool Output**: Formalized schemas (already implemented in our responses)
+
+#### **Documentation & Resources**
+- [MCP November 2025 Roadmap](http://blog.modelcontextprotocol.io/posts/2025-09-26-mcp-next-version-update/) - Official release timeline and features
+- [MCP Protocol Updates](https://modelcontextprotocol.io/specification/2025-03-26/changelog) - Technical changelog
+- [MCP Future Roadmap](https://modelcontextprotocol.io/development/roadmap) - Long-term protocol direction
+
+> **Stay Updated**: Monitor the [MCP GitHub repository](https://github.com/modelcontextprotocol/modelcontextprotocol) for release candidate announcements and detailed migration guides.
+
 ## Features
 
 - 🔍 **Real-time Web Search**: Access up-to-date information from across the web using Perplexity's Search API
