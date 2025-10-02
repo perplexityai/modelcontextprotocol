@@ -207,13 +207,150 @@ app.use(express.json({ limit: '10mb' }));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: 15 * 60 * 1000 // 15 minutes in ms
+  },
+  standardHeaders: true, // Return rate limit info in the headers
+  legacyHeaders: false, // Disable the X-RateLimit-* headers
 });
 app.use(limiter);
+
+// Root endpoint - welcome page
+app.get('/', (req: Request, res: Response) => {
+  res.json({
+    name: 'Perplexity Search MCP Server',
+    version: '1.0.0',
+    description: 'Model Context Protocol server for Perplexity Search API',
+    endpoints: {
+      health: '/health',
+      mcp: '/mcp',
+      register: '/register',
+      tools: '/mcp/tools',
+      call: '/mcp/call'
+    },
+    authentication: 'Basic Auth',
+    status: 'running'
+  });
+});
 
 // Health check endpoint (no auth required for health checks)
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// MCP registration handshake endpoint
+// Claude's MCP client sends a POST to /register before calling /mcp/tools
+app.post('/register', basicAuth, (req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    protocol: 'mcp-http',
+    version: '0.1.0',
+    server: {
+      name: 'perplexity-search-mcp',
+      version: '1.0.0'
+    }
+  });
+});
+
+// Primary MCP endpoint - handles the initial MCP protocol handshake
+// Claude's HTTP MCP client POSTs here for JSON-RPC protocol negotiation
+app.post('/mcp', basicAuth, async (req: Request, res: Response) => {
+  try {
+    const { method, params, id } = req.body;
+
+    // Handle initialize method - required for MCP handshake
+    if (method === 'initialize') {
+      return res.json({
+        jsonrpc: '2.0',
+        id: id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: {
+            tools: {}
+          },
+          serverInfo: {
+            name: 'perplexity-search-mcp',
+            version: '1.0.0'
+          }
+        }
+      });
+    }
+
+    // Handle tools/list method
+    if (method === 'tools/list') {
+      return res.json({
+        jsonrpc: '2.0',
+        id: id,
+        result: {
+          tools: [PERPLEXITY_SEARCH_TOOL]
+        }
+      });
+    }
+
+    // Handle tools/call method
+    if (method === 'tools/call') {
+      const { name, arguments: args } = params;
+
+      if (name === 'perplexity-search') {
+        try {
+          const result = await performSearch(
+            args.query,
+            args.max_results,
+            args.max_tokens_per_page,
+            args.country
+          );
+
+          return res.json({
+            jsonrpc: '2.0',
+            id: id,
+            result: {
+              content: [{ type: 'text', text: result }]
+            }
+          });
+        } catch (error) {
+          return res.json({
+            jsonrpc: '2.0',
+            id: id,
+            error: {
+              code: -32603,
+              message: error instanceof Error ? error.message : String(error)
+            }
+          });
+        }
+      } else {
+        return res.json({
+          jsonrpc: '2.0',
+          id: id,
+          error: {
+            code: -32601,
+            message: `Unknown tool: ${name}`
+          }
+        });
+      }
+    }
+
+    // Handle unknown methods
+    res.json({
+      jsonrpc: '2.0',
+      id: id || null,
+      error: {
+        code: -32601,
+        message: `Unknown method: ${method}`
+      }
+    });
+
+  } catch (error) {
+    // Handle malformed JSON or other parsing errors
+    res.status(400).json({
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code: -32700,
+        message: 'Parse error'
+      }
+    });
+  }
 });
 
 // MCP endpoints with authentication
@@ -293,6 +430,8 @@ app.post('/mcp/call', basicAuth, async (req: Request, res: Response) => {
 const server = app.listen(PORT, () => {
   console.log(`MCP Perplexity Search server listening on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`MCP Protocol: http://localhost:${PORT}/mcp`);
+  console.log(`MCP Register: http://localhost:${PORT}/register`);
   console.log(`MCP Tools: http://localhost:${PORT}/mcp/tools`);
   console.log(`MCP Call: http://localhost:${PORT}/mcp/call`);
 });
