@@ -1,0 +1,30 @@
+{
+  "name": "perplexity",
+  "owner": {
+    "name": "Perplexity AI",
+    "email": "support@perplexity.ai",
+    "url": "https://www.perplexity.ai"
+  },
+  "metadata": {
+    "description": "Official Perplexity AI plugins for Claude Code, providing real-time web search, reasoning, and research capabilities through Sonar models and the Search API",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "perplexity-mcp-server",
+      "source": "./plugins/perplexity-mcp-server",
+      "description": "Official MCP server for Perplexity API Platform providing AI assistants with real-time web search, reasoning, and research capabilities through Sonar models and the Search API.",
+      "version": "0.2.2",
+      "author": {
+        "name": "Perplexity AI",
+        "url": "https://www.perplexity.ai"
+      },
+      "keywords": ["ai", "perplexity", "mcp", "modelcontextprotocol", "search", "reasoning", "research", "sonar"],
+      "category": "ai-tools",
+      "license": "MIT",
+      "homepage": "https://docs.perplexity.ai/guides/mcp-server",
+      "repository": "https://github.com/perplexityai/modelcontextprotocol",
+      "strict": false
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "perplexity-mcp-server",
+  "version": "0.2.2",
+  "description": "Official MCP server for Perplexity API Platform providing AI assistants with real-time web search, reasoning, and research capabilities through Sonar models and the Search API.",
+  "author": {
+    "name": "Perplexity AI",
+    "url": "https://www.perplexity.ai"
+  },
+  "homepage": "https://docs.perplexity.ai/guides/mcp-server",
+  "repository": "https://github.com/perplexityai/modelcontextprotocol",
+  "license": "MIT",
+  "keywords": ["ai", "perplexity", "mcp", "modelcontextprotocol", "search", "reasoning", "research", "sonar"],
+  "category": "ai-tools",
+  "mcpServers": "./.mcp.json",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.1",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1"
+  }
+}
