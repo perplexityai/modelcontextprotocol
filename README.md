@@ -25,7 +25,25 @@ Advanced reasoning and problem-solving using the `sonar-reasoning-pro` model. Pe
 2. Set it as an environment variable: `PERPLEXITY_API_KEY=your_key_here`
 3. (Optional) Set a timeout for requests: `PERPLEXITY_TIMEOUT_MS=600000`. The default is 5 minutes.
 
-### Claude Code
+### Claude Code Plugin (Recommended)
+
+**Easy Installation via Plugin Marketplace:**
+
+1. Add the Perplexity marketplace:
+   ```bash
+   /plugin marketplace add perplexityai/modelcontextprotocol
+   ```
+
+2. Install the plugin:
+   ```bash
+   /plugin install perplexity-mcp-server@perplexity
+   ```
+
+3. Configure your API key when prompted.
+
+This method provides automatic updates and easier management through Claude Code's plugin system.
+
+**Manual MCP Configuration:**
 
 Run in your terminal:
 
@@ -116,4 +134,3 @@ npx @perplexity-ai/mcp-server
 For support, visit [community.perplexity.ai](https://community.perplexity.ai) or [file an issue](https://github.com/perplexityai/modelcontextprotocol/issues).
 
 ---
-
