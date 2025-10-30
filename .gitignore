@@ -39,6 +39,7 @@ yarn-error.log
 # Ignore coverage and test reports
 .coverage
 coverage.xml
+coverage/
 *.cover
 *.pyc
 

@@ -161,9 +161,32 @@ if (!PERPLEXITY_API_KEY) {
   process.exit(1);
 }
 
-// Configure timeout for API requests (default: 5 minutes)
-// Can be overridden via PERPLEXITY_TIMEOUT_MS environment variable
-const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+/**
+ * Validates an array of message objects for chat completion tools.
+ * Ensures each message has a valid role and content field.
+ *
+ * @param {any} messages - The messages to validate
+ * @param {string} toolName - The name of the tool calling this validation (for error messages)
+ * @throws {Error} If messages is not an array or if any message is invalid
+ */
+function validateMessages(messages: any, toolName: string): void {
+  if (!Array.isArray(messages)) {
+    throw new Error(`Invalid arguments for ${toolName}: 'messages' must be an array`);
+  }
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (!msg || typeof msg !== 'object') {
+      throw new Error(`Invalid message at index ${i}: must be an object`);
+    }
+    if (!msg.role || typeof msg.role !== 'string') {
+      throw new Error(`Invalid message at index ${i}: 'role' must be a string`);
+    }
+    if (msg.content === undefined || msg.content === null || typeof msg.content !== 'string') {
+      throw new Error(`Invalid message at index ${i}: 'content' must be a string`);
+    }
+  }
+}
 
 /**
  * Performs a chat completion by sending a request to the Perplexity API.
@@ -174,17 +197,20 @@ const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
  * @returns {Promise<string>} The chat completion result with appended citations.
  * @throws Will throw an error if the API request fails.
  */
-async function performChatCompletion(
+export async function performChatCompletion(
   messages: Array<{ role: string; content: string }>,
   model: string = "sonar-pro"
 ): Promise<string> {
+  // Read timeout fresh each time to respect env var changes
+  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+
   // Construct the API endpoint URL and request body
   const url = new URL("https://api.perplexity.ai/chat/completions");
   const body = {
     model: model, // Model identifier passed as parameter
     messages: messages,
     // Additional parameters can be added here if required (e.g., max_tokens, temperature, etc.)
-    // See the Sonar API documentation for more details: 
+    // See the Sonar API documentation for more details:
     // https://docs.perplexity.ai/api-reference/chat-completions
   };
 
@@ -232,8 +258,18 @@ async function performChatCompletion(
     throw new Error(`Failed to parse JSON response from Perplexity API: ${jsonError}`);
   }
 
-  // Directly retrieve the main message content from the response 
-  let messageContent = data.choices[0].message.content;
+  // Validate response structure
+  if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+    throw new Error("Invalid API response: missing or empty choices array");
+  }
+
+  const firstChoice = data.choices[0];
+  if (!firstChoice.message || typeof firstChoice.message.content !== 'string') {
+    throw new Error("Invalid API response: missing message content");
+  }
+
+  // Directly retrieve the main message content from the response
+  let messageContent = firstChoice.message.content;
 
   // If citations are provided, append them to the message content
   if (data.citations && Array.isArray(data.citations) && data.citations.length > 0) {
@@ -252,7 +288,7 @@ async function performChatCompletion(
  * @param {any} data - The search response data from the API.
  * @returns {string} Formatted search results.
  */
-function formatSearchResults(data: any): string {
+export function formatSearchResults(data: any): string {
   if (!data.results || !Array.isArray(data.results)) {
     return "No search results found.";
   }
@@ -284,12 +320,15 @@ function formatSearchResults(data: any): string {
  * @returns {Promise<string>} The formatted search results.
  * @throws Will throw an error if the API request fails.
  */
-async function performSearch(
+export async function performSearch(
   query: string,
   maxResults: number = 10,
   maxTokensPerPage: number = 1024,
   country?: string
 ): Promise<string> {
+  // Read timeout fresh each time to respect env var changes
+  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+
   const url = new URL("https://api.perplexity.ai/search");
   const body: any = {
     query: query,
@@ -383,11 +422,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     switch (name) {
       case "perplexity_ask": {
-        if (!Array.isArray(args.messages)) {
-          throw new Error("Invalid arguments for perplexity_ask: 'messages' must be an array");
-        }
-        // Invoke the chat completion function with the provided messages
-        const messages = args.messages;
+        validateMessages(args.messages, "perplexity_ask");
+        const messages = args.messages as Array<{ role: string; content: string }>;
         const result = await performChatCompletion(messages, "sonar-pro");
         return {
           content: [{ type: "text", text: result }],
@@ -395,11 +431,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       case "perplexity_research": {
-        if (!Array.isArray(args.messages)) {
-          throw new Error("Invalid arguments for perplexity_research: 'messages' must be an array");
-        }
-        // Invoke the chat completion function with the provided messages using the deep research model
-        const messages = args.messages;
+        validateMessages(args.messages, "perplexity_research");
+        const messages = args.messages as Array<{ role: string; content: string }>;
         const result = await performChatCompletion(messages, "sonar-deep-research");
         return {
           content: [{ type: "text", text: result }],
@@ -407,11 +440,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
       case "perplexity_reason": {
-        if (!Array.isArray(args.messages)) {
-          throw new Error("Invalid arguments for perplexity_reason: 'messages' must be an array");
-        }
-        // Invoke the chat completion function with the provided messages using the reasoning model
-        const messages = args.messages;
+        validateMessages(args.messages, "perplexity_reason");
+        const messages = args.messages as Array<{ role: string; content: string }>;
         const result = await performChatCompletion(messages, "sonar-reasoning-pro");
         return {
           content: [{ type: "text", text: result }],
