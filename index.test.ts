@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { formatSearchResults, performChatCompletion, performSearch } from "./index.js";
 
-describe("Perplexity MCP Server", () => {
+describe("Perplexity via OpenRouter MCP Server", () => {
   let originalFetch: typeof global.fetch;
 
   beforeEach(() => {
@@ -72,19 +72,19 @@ describe("Perplexity MCP Server", () => {
       } as Response);
 
       const messages = [{ role: "user", content: "test question" }];
-      const result = await performChatCompletion(messages, "sonar-pro");
+      const result = await performChatCompletion(messages, "perplexity/sonar-pro");
 
       expect(result).toBe("This is a test response");
       expect(global.fetch).toHaveBeenCalledWith(
-        "https://api.perplexity.ai/chat/completions",
+        "https://openrouter.ai/api/v1/chat/completions",
         expect.objectContaining({
           method: "POST",
-          headers: {
+          headers: expect.objectContaining({
             "Content-Type": "application/json",
             Authorization: "Bearer test-api-key",
-          },
+          }),
           body: JSON.stringify({
-            model: "sonar-pro",
+            model: "perplexity/sonar-pro",
             messages,
           }),
         })
@@ -131,12 +131,12 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
 
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Perplexity API error: 401 Unauthorized"
+        "OpenRouter API error: 401 Unauthorized"
       );
     });
 
     it("should handle timeout errors", async () => {
-      process.env.PERPLEXITY_TIMEOUT_MS = "100";
+      process.env.OPENROUTER_TIMEOUT_MS = "100";
 
       global.fetch = vi.fn().mockImplementation((_url, options) => {
         return new Promise((resolve, reject) => {
@@ -170,7 +170,7 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
 
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Network error while calling Perplexity API"
+        "Network error while calling OpenRouter API"
       );
     });
   });
@@ -202,7 +202,7 @@ describe("Perplexity MCP Server", () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: "Bearer test-api-key",
+            Authorization: "Bearer test-perplexity-key",
           },
           body: JSON.stringify({
             query: "test query",
@@ -435,7 +435,7 @@ describe("Perplexity MCP Server", () => {
     });
 
     it("should handle multiple models correctly", async () => {
-      const models = ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro"];
+      const models = ["perplexity/sonar-pro", "perplexity/sonar-deep-research", "perplexity/sonar-reasoning-pro"];
 
       for (const model of models) {
         const mockResponse = {
@@ -452,7 +452,7 @@ describe("Perplexity MCP Server", () => {
 
         expect(result).toContain(model);
         expect(global.fetch).toHaveBeenCalledWith(
-          "https://api.perplexity.ai/chat/completions",
+          "https://openrouter.ai/api/v1/chat/completions",
           expect.objectContaining({
             body: expect.stringContaining(`"model":"${model}"`),
           })
@@ -535,7 +535,7 @@ describe("Perplexity MCP Server", () => {
 
     it("should respect timeout on each call independently", async () => {
       // First call with long timeout
-      process.env.PERPLEXITY_TIMEOUT_MS = "1000";
+      process.env.OPENROUTER_TIMEOUT_MS = "1000";
 
       global.fetch = vi.fn().mockImplementation((_url, options) => {
         return new Promise((resolve) => {
@@ -556,7 +556,7 @@ describe("Perplexity MCP Server", () => {
       expect(result1).toBe("fast");
 
       // Second call with short timeout
-      process.env.PERPLEXITY_TIMEOUT_MS = "10";
+      process.env.OPENROUTER_TIMEOUT_MS = "10";
 
       global.fetch = vi.fn().mockImplementation((_url, options) => {
         return new Promise((resolve, reject) => {

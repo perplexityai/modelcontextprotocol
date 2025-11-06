@@ -1,30 +1,31 @@
 {
-  "name": "@perplexity-ai/mcp-server",
-  "version": "0.2.3",
-  "description": "Official MCP server for Perplexity API Platform",
+  "name": "perplexity-openrouter-mcp-server",
+  "version": "0.3.0",
+  "description": "MCP server for Perplexity models via OpenRouter API",
   "keywords": [
     "ai",
     "perplexity",
+    "openrouter",
     "mcp",
     "modelcontextprotocol"
   ],
-  "homepage": "https://docs.perplexity.ai/guides/mcp-server",
+  "homepage": "https://github.com/modelcontextprotocol/perplexity-openrouter",
   "bugs": {
-    "url": "https://github.com/perplexityai/modelcontextprotocol/issues"
+    "url": "https://github.com/modelcontextprotocol/perplexity-openrouter/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/perplexityai/modelcontextprotocol.git"
+    "url": "git+https://github.com/modelcontextprotocol/perplexity-openrouter.git"
   },
   "license": "MIT",
-  "author": "Perplexity <>",
+  "author": "Model Context Protocol Community",
   "publishConfig": {
     "access": "public"
   },
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "perplexity-mcp": "dist/index.js"
+    "perplexity-openrouter-mcp": "dist/index.js"
   },
   "files": [
     "dist",

@@ -154,10 +154,10 @@ const PERPLEXITY_SEARCH_TOOL: Tool = {
   },
 };
 
-// Retrieve the Perplexity API key from environment variables
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
-if (!PERPLEXITY_API_KEY) {
-  console.error("Error: PERPLEXITY_API_KEY environment variable is required");
+// Retrieve the OpenRouter API key from environment variables
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+if (!OPENROUTER_API_KEY) {
+  console.error("Error: OPENROUTER_API_KEY environment variable is required");
   process.exit(1);
 }
 
@@ -199,19 +199,19 @@ function validateMessages(messages: any, toolName: string): void {
  */
 export async function performChatCompletion(
   messages: Array<{ role: string; content: string }>,
-  model: string = "sonar-pro"
+  model: string = "perplexity/sonar-pro"
 ): Promise<string> {
   // Read timeout fresh each time to respect env var changes
-  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+  const TIMEOUT_MS = parseInt(process.env.OPENROUTER_TIMEOUT_MS || "300000", 10);
 
   // Construct the API endpoint URL and request body
-  const url = new URL("https://api.perplexity.ai/chat/completions");
+  const url = new URL("https://openrouter.ai/api/v1/chat/completions");
   const body = {
     model: model, // Model identifier passed as parameter
     messages: messages,
     // Additional parameters can be added here if required (e.g., max_tokens, temperature, etc.)
-    // See the Sonar API documentation for more details:
-    // https://docs.perplexity.ai/api-reference/chat-completions
+    // See the OpenRouter API documentation for more details:
+    // https://openrouter.ai/docs/api-reference/parameters
   };
 
   const controller = new AbortController();
@@ -223,7 +223,9 @@ export async function performChatCompletion(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${PERPLEXITY_API_KEY}`,
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://github.com/modelcontextprotocol/perplexity-openrouter",
+        "X-Title": process.env.OPENROUTER_SITE_NAME || "MCP Perplexity via OpenRouter",
       },
       body: JSON.stringify(body),
       signal: controller.signal,
@@ -232,9 +234,9 @@ export async function performChatCompletion(
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Request timeout: Perplexity API did not respond within ${TIMEOUT_MS}ms. Consider increasing PERPLEXITY_TIMEOUT_MS.`);
+      throw new Error(`Request timeout: OpenRouter API did not respond within ${TIMEOUT_MS}ms. Consider increasing OPENROUTER_TIMEOUT_MS.`);
     }
-    throw new Error(`Network error while calling Perplexity API: ${error}`);
+    throw new Error(`Network error while calling OpenRouter API: ${error}`);
   }
 
   // Check for non-successful HTTP status
@@ -246,7 +248,7 @@ export async function performChatCompletion(
       errorText = "Unable to parse error response";
     }
     throw new Error(
-      `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`
+      `OpenRouter API error: ${response.status} ${response.statusText}\n${errorText}`
     );
   }
 
@@ -255,7 +257,7 @@ export async function performChatCompletion(
   try {
     data = await response.json();
   } catch (jsonError) {
-    throw new Error(`Failed to parse JSON response from Perplexity API: ${jsonError}`);
+    throw new Error(`Failed to parse JSON response from OpenRouter API: ${jsonError}`);
   }
 
   // Validate response structure
@@ -313,6 +315,11 @@ export function formatSearchResults(data: any): string {
 /**
  * Performs a web search using the Perplexity Search API.
  *
+ * NOTE: This function uses the direct Perplexity API endpoint, not OpenRouter,
+ * because OpenRouter does not currently support the Perplexity Search API endpoint.
+ * You will need a PERPLEXITY_API_KEY environment variable set to use this tool.
+ * If you only want to use OpenRouter, consider removing this tool.
+ *
  * @param {string} query - The search query string.
  * @param {number} maxResults - Maximum number of results to return (1-20).
  * @param {number} maxTokensPerPage - Maximum tokens to extract per webpage.
@@ -326,6 +333,12 @@ export async function performSearch(
   maxTokensPerPage: number = 1024,
   country?: string
 ): Promise<string> {
+  // This tool requires a direct Perplexity API key
+  const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
+  if (!PERPLEXITY_API_KEY) {
+    throw new Error("PERPLEXITY_API_KEY environment variable is required for the perplexity_search tool. This tool uses the direct Perplexity API, not OpenRouter.");
+  }
+
   // Read timeout fresh each time to respect env var changes
   const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
 
@@ -389,8 +402,8 @@ export async function performSearch(
 // Initialize the server with tool metadata and capabilities
 const server = new Server(
   {
-    name: "example-servers/perplexity-ask",
-    version: "0.1.0",
+    name: "perplexity-openrouter",
+    version: "0.3.0",
   },
   {
     capabilities: {
@@ -424,7 +437,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "perplexity_ask": {
         validateMessages(args.messages, "perplexity_ask");
         const messages = args.messages as Array<{ role: string; content: string }>;
-        const result = await performChatCompletion(messages, "sonar-pro");
+        const result = await performChatCompletion(messages, "perplexity/sonar-pro");
         return {
           content: [{ type: "text", text: result }],
           isError: false,
@@ -433,7 +446,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "perplexity_research": {
         validateMessages(args.messages, "perplexity_research");
         const messages = args.messages as Array<{ role: string; content: string }>;
-        const result = await performChatCompletion(messages, "sonar-deep-research");
+        const result = await performChatCompletion(messages, "perplexity/sonar-deep-research");
         return {
           content: [{ type: "text", text: result }],
           isError: false,
@@ -442,7 +455,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "perplexity_reason": {
         validateMessages(args.messages, "perplexity_reason");
         const messages = args.messages as Array<{ role: string; content: string }>;
-        const result = await performChatCompletion(messages, "sonar-reasoning-pro");
+        const result = await performChatCompletion(messages, "perplexity/sonar-reasoning-pro");
         return {
           content: [{ type: "text", text: result }],
           isError: false,
@@ -497,7 +510,7 @@ async function runServer() {
   try {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("Perplexity MCP Server running on stdio with Ask, Research, Reason, and Search tools");
+    console.error("Perplexity via OpenRouter MCP Server running on stdio with Ask, Research, Reason, and Search tools");
   } catch (error) {
     console.error("Fatal error running server:", error);
     process.exit(1);

@@ -4,7 +4,8 @@ export default defineConfig({
   test: {
     exclude: ['**/node_modules/**', '**/dist/**'],
     env: {
-      PERPLEXITY_API_KEY: 'test-api-key',
+      OPENROUTER_API_KEY: 'test-api-key',
+      PERPLEXITY_API_KEY: 'test-perplexity-key', // For search API tests
     },
     coverage: {
       provider: 'v8',
