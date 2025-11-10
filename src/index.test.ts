@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { formatSearchResults, performChatCompletion, performSearch } from "./index.js";
+import { formatSearchResults, performChatCompletion, performSearch } from "./server.js";
 
 describe("Perplexity MCP Server", () => {
   let originalFetch: typeof global.fetch;

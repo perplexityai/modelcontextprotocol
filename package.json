@@ -1,6 +1,6 @@
 {
   "name": "@perplexity-ai/mcp-server",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "mcpName": "io.github.perplexityai/mcp-server",
   "description": "Real-time web search, reasoning, and research through Perplexity's API",
   "keywords": [
@@ -28,7 +28,9 @@
     "perplexity-mcp": "dist/index.js"
   },
   "files": [
-    "dist",
+    "dist/*.js",
+    "!dist/*.test.js",
+    "!dist/vitest.config.js",
     "README.md",
     ".claude-plugin"
   ],
@@ -36,18 +38,28 @@
     "build": "tsc && shx chmod +x dist/*.js",
     "prepare": "npm run build",
     "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "start:http": "PORT=8080 node dist/http.js",
+    "dev": "tsx src/index.ts",
+    "dev:http": "PORT=8080 tsx src/http.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.21.1",
-    "undici": "^6.20.0"
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "undici": "^6.20.0",
+    "zod": "^3.25.46"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/node": "^20",
     "@vitest/coverage-v8": "^4.0.5",
     "shx": "^0.4.0",
+    "tsx": "^4.19.4",
     "typescript": "^5.9.3",
     "vitest": "^4.0.5"
   },

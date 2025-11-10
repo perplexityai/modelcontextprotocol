@@ -7,7 +7,7 @@ COPY tsconfig.json ./
 
 RUN --mount=type=cache,target=/root/.npm npm install --ignore-scripts
 
-COPY . .
+COPY src/ ./src/
 
 RUN npm run build
 
@@ -23,4 +23,6 @@ ENV NODE_ENV=production
 
 RUN npm ci --ignore-scripts --omit-dev
 
-ENTRYPOINT ["node", "dist/index.js"]
+EXPOSE 8080
+
+ENTRYPOINT ["node", "dist/http.js"]

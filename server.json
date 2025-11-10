@@ -3,15 +3,22 @@
   "name": "io.github.perplexityai/mcp-server",
   "title": "Perplexity API Platform",
   "description": "Real-time web search, reasoning, and research through Perplexity's API",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@perplexity-ai/mcp-server",
-      "version": "0.4.1",
+      "version": "0.5.0",
       "transport": {
         "type": "stdio"
       }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.perplexity.ai/mcp",
+      "description": "Hosted Perplexity MCP server with HTTP transport. Set PERPLEXITY_API_KEY environment variable."
     }
   ]
 }

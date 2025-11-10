@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2015",
+    "target": "ES2020",
     "module": "ESNext",
     "outDir": "./dist",
-    "rootDir": ".",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -11,6 +11,6 @@
     "moduleResolution": "node"
   },
   "include": [
-    "./**/*.ts"
+    "src/**/*.ts"
   ]
 }
