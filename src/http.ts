@@ -4,11 +4,12 @@ import express from "express";
 import cors from "cors";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPerplexityServer } from "./server.js";
+import { logger } from "./logger.js";
 
 // Check for required API key
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 if (!PERPLEXITY_API_KEY) {
-  console.error("Error: PERPLEXITY_API_KEY environment variable is required");
+  logger.error("PERPLEXITY_API_KEY environment variable is required");
   process.exit(1);
 }
 
@@ -62,7 +63,7 @@ app.all("/mcp", async (req, res) => {
     
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error("Error handling MCP request:", error);
+    logger.error("Error handling MCP request", { error: String(error) });
     if (!res.headersSent) {
       res.status(500).json({
         jsonrpc: "2.0",
@@ -84,10 +85,10 @@ app.get("/health", (req, res) => {
  * Start the HTTP server
  */
 app.listen(PORT, BIND_ADDRESS, () => {
-  console.log(`Perplexity MCP Server listening on http://${BIND_ADDRESS}:${PORT}/mcp`);
-  console.log(`Allowed origins: ${ALLOWED_ORIGINS.join(", ")}`);
+  logger.info(`Perplexity MCP Server listening on http://${BIND_ADDRESS}:${PORT}/mcp`);
+  logger.info(`Allowed origins: ${ALLOWED_ORIGINS.join(", ")}`);
 }).on("error", (error) => {
-  console.error("Server error:", error);
+  logger.error("Server error", { error: String(error) });
   process.exit(1);
 });
 

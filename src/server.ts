@@ -1,6 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
+import type {
+  Message,
+  ChatCompletionResponse,
+  SearchResponse,
+  SearchRequestBody,
+  UndiciRequestOptions
+} from "./types.js";
+import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation.js";
 
 // Retrieve the Perplexity API key from environment variables
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
@@ -8,10 +16,10 @@ const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 /**
  * Gets the proxy URL from environment variables.
  * Checks PERPLEXITY_PROXY, HTTPS_PROXY, HTTP_PROXY in order.
- * 
+ *
  * @returns {string | undefined} The proxy URL if configured, undefined otherwise
  */
-function getProxyUrl(): string | undefined {
+export function getProxyUrl(): string | undefined {
   return process.env.PERPLEXITY_PROXY || 
          process.env.HTTPS_PROXY || 
          process.env.HTTP_PROXY || 
@@ -21,38 +29,39 @@ function getProxyUrl(): string | undefined {
 /**
  * Creates a proxy-aware fetch function.
  * Uses undici with ProxyAgent when a proxy is configured, otherwise uses native fetch.
- * 
+ *
  * @param {string} url - The URL to fetch
  * @param {RequestInit} options - Fetch options
  * @returns {Promise<Response>} The fetch response
  */
-async function proxyAwareFetch(url: string, options: RequestInit = {}): Promise<Response> {
+export async function proxyAwareFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const proxyUrl = getProxyUrl();
-  
+
   if (proxyUrl) {
     // Use undici with ProxyAgent when proxy is configured
     const proxyAgent = new ProxyAgent(proxyUrl);
-    const response = await undiciFetch(url, {
+    const undiciOptions: UndiciRequestOptions = {
       ...options,
       dispatcher: proxyAgent,
-    } as any);
+    };
+    const response = await undiciFetch(url, undiciOptions);
     // Cast to native Response type for compatibility
     return response as unknown as Response;
-  } else {
-    // Use native fetch when no proxy is configured
-    return fetch(url, options);
   }
+
+  // Use native fetch when no proxy is configured
+  return fetch(url, options);
 }
 
 /**
  * Validates an array of message objects for chat completion tools.
  * Ensures each message has a valid role and content field.
  *
- * @param {any} messages - The messages to validate
+ * @param {unknown} messages - The messages to validate
  * @param {string} toolName - The name of the tool calling this validation (for error messages)
  * @throws {Error} If messages is not an array or if any message is invalid
  */
-function validateMessages(messages: any, toolName: string): void {
+function validateMessages(messages: unknown, toolName: string): asserts messages is Message[] {
   if (!Array.isArray(messages)) {
     throw new Error(`Invalid arguments for ${toolName}: 'messages' must be an array`);
   }
@@ -78,7 +87,7 @@ function validateMessages(messages: any, toolName: string): void {
  * @param {string} content - The content to process
  * @returns {string} The content with thinking tokens removed
  */
-function stripThinkingTokens(content: string): string {
+export function stripThinkingTokens(content: string): string {
   return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
@@ -86,14 +95,14 @@ function stripThinkingTokens(content: string): string {
  * Performs a chat completion by sending a request to the Perplexity API.
  * Appends citations to the returned message content if they exist.
  *
- * @param {Array<{ role: string; content: string }>} messages - An array of message objects.
+ * @param {Message[]} messages - An array of message objects.
  * @param {string} model - The model to use for the completion.
  * @param {boolean} stripThinking - If true, removes <think>...</think> tags from the response.
  * @returns {Promise<string>} The chat completion result with appended citations.
  * @throws Will throw an error if the API request fails.
  */
 export async function performChatCompletion(
-  messages: Array<{ role: string; content: string }>,
+  messages: Message[],
   model: string = "sonar-pro",
   stripThinking: boolean = false
 ): Promise<string> {
@@ -147,23 +156,15 @@ export async function performChatCompletion(
     );
   }
 
-  // Attempt to parse the JSON response from the API
-  let data;
+  let data: ChatCompletionResponse;
   try {
-    data = await response.json();
-  } catch (jsonError) {
-    throw new Error(`Failed to parse JSON response from Perplexity API: ${jsonError}`);
-  }
-
-  // Validate response structure
-  if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
-    throw new Error("Invalid API response: missing or empty choices array");
+    const json = await response.json();
+    data = ChatCompletionResponseSchema.parse(json);
+  } catch (error) {
+    throw new Error(`Invalid API response: ${error}`);
   }
 
   const firstChoice = data.choices[0];
-  if (!firstChoice.message || typeof firstChoice.message.content !== 'string') {
-    throw new Error("Invalid API response: missing message content");
-  }
 
   // Directly retrieve the main message content from the response
   let messageContent = firstChoice.message.content;
@@ -176,7 +177,7 @@ export async function performChatCompletion(
   // If citations are provided, append them to the message content
   if (data.citations && Array.isArray(data.citations) && data.citations.length > 0) {
     messageContent += "\n\nCitations:\n";
-    data.citations.forEach((citation: string, index: number) => {
+    data.citations.forEach((citation, index) => {
       messageContent += `[${index + 1}] ${citation}\n`;
     });
   }
@@ -187,17 +188,17 @@ export async function performChatCompletion(
 /**
  * Formats search results from the Perplexity Search API into a readable string.
  *
- * @param {any} data - The search response data from the API.
+ * @param {SearchResponse} data - The search response data from the API.
  * @returns {string} Formatted search results.
  */
-export function formatSearchResults(data: any): string {
+export function formatSearchResults(data: SearchResponse): string {
   if (!data.results || !Array.isArray(data.results)) {
     return "No search results found.";
   }
 
   let formattedResults = `Found ${data.results.length} search results:\n\n`;
-  
-  data.results.forEach((result: any, index: number) => {
+
+  data.results.forEach((result, index) => {
     formattedResults += `${index + 1}. **${result.title}**\n`;
     formattedResults += `   URL: ${result.url}\n`;
     if (result.snippet) {
@@ -236,15 +237,12 @@ export async function performSearch(
   const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
 
   const url = new URL("https://api.perplexity.ai/search");
-  const body: any = {
+  const body: SearchRequestBody = {
     query: query,
     max_results: maxResults,
     max_tokens_per_page: maxTokensPerPage,
+    ...(country && { country }),
   };
-
-  if (country) {
-    body.country = country;
-  }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -282,11 +280,12 @@ export async function performSearch(
     );
   }
 
-  let data;
+  let data: SearchResponse;
   try {
-    data = await response.json();
-  } catch (jsonError) {
-    throw new Error(`Failed to parse JSON response from Perplexity Search API: ${jsonError}`);
+    const json = await response.json();
+    data = SearchResponseSchema.parse(json);
+  } catch (error) {
+    throw new Error(`Invalid API response: ${error}`);
   }
 
   return formatSearchResults(data);
@@ -295,7 +294,7 @@ export async function performSearch(
 /**
  * Creates and configures the Perplexity MCP server with all tools.
  * This factory function is transport-agnostic and returns a configured server instance.
- * 
+ *
  * @returns The configured MCP server instance
  */
 export function createPerplexityServer() {

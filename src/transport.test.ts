@@ -152,7 +152,7 @@ describe("Transport Integration Tests", () => {
       expect(data.result.tools).toHaveLength(4);
       
       // Verify all four tools are present
-      const toolNames = data.result.tools.map((t: any) => t.name);
+      const toolNames = data.result.tools.map((t: { name: string }) => t.name);
       expect(toolNames).toContain("perplexity_ask");
       expect(toolNames).toContain("perplexity_research");
       expect(toolNames).toContain("perplexity_reason");

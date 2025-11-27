@@ -33,6 +33,7 @@ Advanced reasoning and problem-solving using the `sonar-reasoning-pro` model. Pe
 1. Get your Perplexity API Key from the [API Portal](https://www.perplexity.ai/account/api/group)
 2. Set it as an environment variable: `PERPLEXITY_API_KEY=your_key_here`
 3. (Optional) Set a timeout for requests: `PERPLEXITY_TIMEOUT_MS=600000`. The default is 5 minutes.
+4. (Optional) Set log level for debugging: `PERPLEXITY_LOG_LEVEL=DEBUG|INFO|WARN|ERROR`. The default is ERROR.
 
 ### Claude Code
 
