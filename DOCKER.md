@@ -27,6 +27,20 @@ docker run --rm -p 8080:8080 -e PERPLEXITY_API_KEY=your_key_here perplexity-mcp-
 
 The server will be accessible at `http://localhost:8080/mcp`
 
+### With HTTP Basic Auth
+
+Require a username/password on the MCP HTTP endpoint:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e PERPLEXITY_API_KEY=your_key_here \
+  -e BASIC_AUTH_USERNAME=admin \
+  -e BASIC_AUTH_PASSWORD=changeme \
+  perplexity-mcp-server
+```
+
+Requests must send `Authorization: Basic <base64(username:password)>`.
+
 ### With Custom Timeout
 
 Set a custom timeout for requests (default is 5 minutes):
@@ -100,4 +114,3 @@ PERPLEXITY_API_KEY=your_key_here npm start
 ```
 
 > **Note**: The Docker image is optimized for HTTP mode deployment. For local STDIO usage, the `npx` method documented in the main README is recommended.
-
