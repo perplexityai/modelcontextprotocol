@@ -11,6 +11,7 @@ import type {
 import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation.js";
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
+const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
 
 export function getProxyUrl(): string | undefined {
   return process.env.PERPLEXITY_PROXY || 
@@ -71,7 +72,7 @@ export async function performChatCompletion(
   // Read timeout fresh each time to respect env var changes
   const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
 
-  const url = new URL("https://api.perplexity.ai/chat/completions");
+  const url = new URL(`${PERPLEXITY_BASE_URL}/chat/completions`);
   const body = {
     model: model,
     messages: messages,
@@ -187,7 +188,7 @@ export async function performSearch(
   // Read timeout fresh each time to respect env var changes
   const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
 
-  const url = new URL("https://api.perplexity.ai/search");
+  const url = new URL(`${PERPLEXITY_BASE_URL}/search`);
   const body: SearchRequestBody = {
     query: query,
     max_results: maxResults,

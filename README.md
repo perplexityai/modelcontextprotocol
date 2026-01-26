@@ -34,7 +34,8 @@ Advanced reasoning and problem-solving using the `sonar-reasoning-pro` model. Pe
 1. Get your Perplexity API Key from the [API Portal](https://www.perplexity.ai/account/api/group)
 2. Replace `your_key_here` in the configurations below with your API key
 3. (Optional) Set timeout: `PERPLEXITY_TIMEOUT_MS=600000` (default: 5 minutes)
-4. (Optional) Set log level: `PERPLEXITY_LOG_LEVEL=DEBUG|INFO|WARN|ERROR` (default: ERROR)
+4. (Optional) Set custom base URL: `PERPLEXITY_BASE_URL=https://your-custom-url.com` (default: https://api.perplexity.ai)
+5. (Optional) Set log level: `PERPLEXITY_LOG_LEVEL=DEBUG|INFO|WARN|ERROR` (default: ERROR)
 
 ### Claude Code
 
@@ -145,6 +146,7 @@ For cloud or shared deployments, run the server in HTTP mode.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PERPLEXITY_API_KEY` | Your Perplexity API key | *Required* |
+| `PERPLEXITY_BASE_URL` | Custom base URL for API requests | `https://api.perplexity.ai` |
 | `PORT` | HTTP server port | `8080` |
 | `BIND_ADDRESS` | Network interface to bind to | `0.0.0.0` |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
