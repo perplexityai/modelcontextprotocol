@@ -249,7 +249,7 @@ export async function performSearch(
 export function createPerplexityServer(serviceOrigin?: string) {
   const server = new McpServer({
     name: "io.github.perplexityai/mcp-server",
-    version: "0.6.1",
+    version: "0.6.2",
   });
 
   const messageSchema = z.object({
