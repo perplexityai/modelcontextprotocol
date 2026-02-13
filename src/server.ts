@@ -247,13 +247,24 @@ export async function performSearch(
 }
 
 export function createPerplexityServer(serviceOrigin?: string) {
-  const server = new McpServer({
-    name: "io.github.perplexityai/mcp-server",
-    version: "0.6.2",
-  });
+  const server = new McpServer(
+    {
+      name: "io.github.perplexityai/mcp-server",
+      version: "0.6.2",
+    },
+    {
+      instructions:
+        "Perplexity AI server for web-grounded search, research, and reasoning. " +
+        "Use perplexity_search for finding URLs, facts, and recent news. " +
+        "Use perplexity_ask for quick AI-answered questions with citations. " +
+        "Use perplexity_research for in-depth multi-source investigation (slow, 30s+). " +
+        "Use perplexity_reason for complex analysis requiring step-by-step logic. " +
+        "All tools are read-only and access live web data.",
+    }
+  );
 
   const messageSchema = z.object({
-    role: z.string().describe("Role of the message (e.g., system, user, assistant)"),
+    role: z.enum(["system", "user", "assistant"]).describe("Role of the message sender"),
     content: z.string().describe("The content of the message"),
   });
   
@@ -263,7 +274,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
     .describe("If true, removes <think>...</think> tags and their content from the response to save context tokens. Default is false.");
   
   const responseOutputSchema = {
-    response: z.string().describe("The response from Perplexity"),
+    response: z.string().describe("AI-generated text response with numbered citation references"),
   };
 
   // Input schemas
@@ -274,14 +285,17 @@ export function createPerplexityServer(serviceOrigin?: string) {
     "perplexity_ask",
     {
       title: "Ask Perplexity",
-      description: "Engages in a conversation using the Sonar API. " +
-        "Accepts an array of messages (each with a role and content) " +
-        "and returns a chat completion response from the Perplexity model.",
+      description: "Answer a question using web-grounded AI (Sonar Pro model). " +
+        "Best for: quick factual questions, summaries, explanations, and general Q&A. " +
+        "Returns a text response with numbered citations. Fastest and cheapest option. " +
+        "For in-depth multi-source research, use perplexity_research instead. " +
+        "For step-by-step reasoning and analysis, use perplexity_reason instead.",
       inputSchema: messagesOnlyInputSchema as any,
       outputSchema: responseOutputSchema as any,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
+        idempotentHint: true,
       },
     },
     async (args: any) => {
@@ -299,14 +313,18 @@ export function createPerplexityServer(serviceOrigin?: string) {
     "perplexity_research",
     {
       title: "Deep Research",
-      description: "Performs deep research using the Perplexity API. " +
-        "Accepts an array of messages (each with a role and content) " +
-        "and returns a comprehensive research response with citations.",
+      description: "Conduct deep, multi-source research on a topic (Sonar Deep Research model). " +
+        "Best for: literature reviews, comprehensive overviews, investigative queries needing " +
+        "many sources. Returns a detailed response with numbered citations. " +
+        "Significantly slower than other tools (30+ seconds). " +
+        "For quick factual questions, use perplexity_ask instead. " +
+        "For logical analysis and reasoning, use perplexity_reason instead.",
       inputSchema: messagesWithStripThinkingInputSchema as any,
       outputSchema: responseOutputSchema as any,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
+        idempotentHint: true,
       },
     },
     async (args: any) => {
@@ -325,14 +343,17 @@ export function createPerplexityServer(serviceOrigin?: string) {
     "perplexity_reason",
     {
       title: "Advanced Reasoning",
-      description: "Performs reasoning tasks using the Perplexity API. " +
-        "Accepts an array of messages (each with a role and content) " +
-        "and returns a well-reasoned response using the sonar-reasoning-pro model.",
+      description: "Analyze a question using step-by-step reasoning with web grounding (Sonar Reasoning Pro model). " +
+        "Best for: math, logic, comparisons, complex arguments, and tasks requiring chain-of-thought. " +
+        "Returns a reasoned response with numbered citations. " +
+        "For quick factual questions, use perplexity_ask instead. " +
+        "For comprehensive multi-source research, use perplexity_research instead.",
       inputSchema: messagesWithStripThinkingInputSchema as any,
       outputSchema: responseOutputSchema as any,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
+        idempotentHint: true,
       },
     },
     async (args: any) => {
@@ -358,21 +379,23 @@ export function createPerplexityServer(serviceOrigin?: string) {
   };
   
   const searchOutputSchema = {
-    results: z.string().describe("Formatted search results"),
+    results: z.string().describe("Formatted search results, each with title, URL, snippet, and date"),
   };
 
   server.registerTool(
     "perplexity_search",
     {
       title: "Search the Web",
-      description: "Performs web search using the Perplexity Search API. " +
-        "Returns ranked search results with titles, URLs, snippets, and metadata. " +
-        "Perfect for finding up-to-date facts, news, or specific information.",
+      description: "Search the web and return a ranked list of results with titles, URLs, snippets, and dates. " +
+        "Best for: finding specific URLs, checking recent news, verifying facts, discovering sources. " +
+        "Returns formatted results (title, URL, snippet, date) — no AI synthesis. " +
+        "For AI-generated answers with citations, use perplexity_ask instead.",
       inputSchema: searchInputSchema as any,
       outputSchema: searchOutputSchema as any,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
+        idempotentHint: true,
       },
     },
     async (args: any) => {
