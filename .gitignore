@@ -54,3 +54,8 @@ Desktop.ini
 
 # Ignore MCP registry authentication tokens
 .mcpregistry_*
+
+# Ignore private keys and migration artifacts
+*.pem
+mcp-publisher
+migrate-namespace.sh
