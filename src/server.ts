@@ -256,7 +256,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
   const server = new McpServer(
     {
       name: "io.github.perplexityai/mcp-server",
-      version: "0.6.2",
+      version: "0.7.0",
     },
     {
       instructions:

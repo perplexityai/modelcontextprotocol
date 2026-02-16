@@ -3,12 +3,12 @@
   "name": "io.github.perplexityai/mcp-server",
   "title": "Perplexity API Platform",
   "description": "Real-time web search, reasoning, and research through Perplexity's API",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@perplexity-ai/mcp-server",
-      "version": "0.6.2",
+      "version": "0.7.0",
       "transport": {
         "type": "stdio"
       }
