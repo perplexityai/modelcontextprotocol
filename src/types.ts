@@ -56,6 +56,13 @@ export interface SearchRequestBody {
   country?: string;
 }
 
+export interface ChatCompletionOptions {
+  search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
+  search_domain_filter?: string[];
+  search_context_size?: "low" | "medium" | "high";
+  reasoning_effort?: "minimal" | "low" | "medium" | "high";
+}
+
 export interface UndiciRequestOptions {
   [key: string]: unknown;
   dispatcher?: ProxyAgent;
