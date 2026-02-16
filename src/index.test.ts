@@ -473,14 +473,35 @@ describe("Perplexity MCP Server", () => {
       const models = ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro"];
 
       for (const model of models) {
-        const mockResponse = {
-          choices: [{ message: { content: `Response from ${model}` } }],
-        };
+        if (model === "sonar-deep-research") {
+          // sonar-deep-research uses streaming, so provide an SSE mock
+          const sseData = [
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "Response " } }] })}\n\n`,
+            `data: ${JSON.stringify({ choices: [{ delta: { content: `from ${model}` } }] })}\n\n`,
+            `data: [DONE]\n\n`,
+          ].join("");
 
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => mockResponse,
-        } as Response);
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(sseData));
+              controller.close();
+            },
+          });
+
+          global.fetch = vi.fn().mockResolvedValue({
+            ok: true,
+            body: stream,
+          } as unknown as Response);
+        } else {
+          const mockResponse = {
+            choices: [{ message: { content: `Response from ${model}` } }],
+          };
+
+          global.fetch = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => mockResponse,
+          } as Response);
+        }
 
         const messages = [{ role: "user", content: "test" }];
         const result = await performChatCompletion(messages, model);
