@@ -4,6 +4,7 @@ import { fetch as undiciFetch, ProxyAgent } from "undici";
 import type {
   Message,
   ChatCompletionResponse,
+  ChatCompletionOptions,
   SearchResponse,
   SearchRequestBody,
   UndiciRequestOptions
@@ -63,7 +64,8 @@ export async function performChatCompletion(
   messages: Message[],
   model: string = "sonar-pro",
   stripThinking: boolean = false,
-  serviceOrigin?: string
+  serviceOrigin?: string,
+  options?: ChatCompletionOptions
 ): Promise<string> {
   if (!PERPLEXITY_API_KEY) {
     throw new Error("PERPLEXITY_API_KEY environment variable is required");
@@ -73,9 +75,13 @@ export async function performChatCompletion(
   const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
 
   const url = new URL(`${PERPLEXITY_BASE_URL}/chat/completions`);
-  const body = {
+  const body: Record<string, unknown> = {
     model: model,
     messages: messages,
+    ...(options?.search_recency_filter && { search_recency_filter: options.search_recency_filter }),
+    ...(options?.search_domain_filter && { search_domain_filter: options.search_domain_filter }),
+    ...(options?.search_context_size && { web_search_options: { search_context_size: options.search_context_size } }),
+    ...(options?.reasoning_effort && { reasoning_effort: options.reasoning_effort }),
   };
 
   const controller = new AbortController();
