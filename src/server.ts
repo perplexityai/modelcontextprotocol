@@ -262,9 +262,9 @@ export function createPerplexityServer(serviceOrigin?: string) {
       instructions:
         "Perplexity AI server for web-grounded search, research, and reasoning. " +
         "Use perplexity_search for finding URLs, facts, and recent news. " +
-        "Use perplexity_ask for quick AI-answered questions with citations. " +
-        "Use perplexity_research for in-depth multi-source investigation (slow, 30s+). " +
-        "Use perplexity_reason for complex analysis requiring step-by-step logic. " +
+        "Use perplexity_ask for quick AI-answered questions with citations. Supports recency filters, domain restrictions, and search context size control. " +
+        "Use perplexity_research for in-depth multi-source investigation (slow, 30s+). Supports reasoning_effort parameter to control depth. " +
+        "Use perplexity_reason for complex analysis requiring step-by-step logic. Supports recency filters, domain restrictions, and search context size control. " +
         "All tools are read-only and access live web data.",
     }
   );
@@ -279,13 +279,41 @@ export function createPerplexityServer(serviceOrigin?: string) {
   const stripThinkingField = z.boolean().optional()
     .describe("If true, removes <think>...</think> tags and their content from the response to save context tokens. Default is false.");
   
+  const searchRecencyFilterField = z.enum(["hour", "day", "week", "month", "year"]).optional()
+    .describe("Filter search results by recency. Use 'hour' for very recent news, 'day' for today's updates, 'week' for this week, etc.");
+  
+  const searchDomainFilterField = z.array(z.string()).optional()
+    .describe("Restrict search results to specific domains (e.g., ['wikipedia.org', 'arxiv.org']). Use '-' prefix for exclusion (e.g., ['-reddit.com']).");
+  
+  const searchContextSizeField = z.enum(["low", "medium", "high"]).optional()
+    .describe("Controls how much web context is retrieved. 'low' (default) is fastest, 'high' provides more comprehensive results.");
+  
+  const reasoningEffortField = z.enum(["minimal", "low", "medium", "high"]).optional()
+    .describe("Controls depth of deep research reasoning. Higher values produce more thorough analysis.");
+  
   const responseOutputSchema = {
     response: z.string().describe("AI-generated text response with numbered citation references"),
   };
 
   // Input schemas
-  const messagesOnlyInputSchema = { messages: messagesField };
-  const messagesWithStripThinkingInputSchema = { messages: messagesField, strip_thinking: stripThinkingField };
+  const messagesOnlyInputSchema = { 
+    messages: messagesField,
+    search_recency_filter: searchRecencyFilterField,
+    search_domain_filter: searchDomainFilterField,
+    search_context_size: searchContextSizeField,
+  };
+  const messagesWithStripThinkingInputSchema = { 
+    messages: messagesField, 
+    strip_thinking: stripThinkingField,
+    search_recency_filter: searchRecencyFilterField,
+    search_domain_filter: searchDomainFilterField,
+    search_context_size: searchContextSizeField,
+  };
+  const researchInputSchema = {
+    messages: messagesField,
+    strip_thinking: stripThinkingField,
+    reasoning_effort: reasoningEffortField,
+  };
 
   server.registerTool(
     "perplexity_ask",
@@ -294,6 +322,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
       description: "Answer a question using web-grounded AI (Sonar Pro model). " +
         "Best for: quick factual questions, summaries, explanations, and general Q&A. " +
         "Returns a text response with numbered citations. Fastest and cheapest option. " +
+        "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search context size. " +
         "For in-depth multi-source research, use perplexity_research instead. " +
         "For step-by-step reasoning and analysis, use perplexity_reason instead.",
       inputSchema: messagesOnlyInputSchema as any,
@@ -305,9 +334,19 @@ export function createPerplexityServer(serviceOrigin?: string) {
       },
     },
     async (args: any) => {
-      const { messages } = args as { messages: Message[] };
+      const { messages, search_recency_filter, search_domain_filter, search_context_size } = args as { 
+        messages: Message[];
+        search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
+        search_domain_filter?: string[];
+        search_context_size?: "low" | "medium" | "high";
+      };
       validateMessages(messages, "perplexity_ask");
-      const result = await performChatCompletion(messages, "sonar-pro", false, serviceOrigin);
+      const options = {
+        ...(search_recency_filter && { search_recency_filter }),
+        ...(search_domain_filter && { search_domain_filter }),
+        ...(search_context_size && { search_context_size }),
+      };
+      const result = await performChatCompletion(messages, "sonar-pro", false, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -325,7 +364,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
         "Significantly slower than other tools (30+ seconds). " +
         "For quick factual questions, use perplexity_ask instead. " +
         "For logical analysis and reasoning, use perplexity_reason instead.",
-      inputSchema: messagesWithStripThinkingInputSchema as any,
+      inputSchema: researchInputSchema as any,
       outputSchema: responseOutputSchema as any,
       annotations: {
         readOnlyHint: true,
@@ -334,10 +373,17 @@ export function createPerplexityServer(serviceOrigin?: string) {
       },
     },
     async (args: any) => {
-      const { messages, strip_thinking } = args as { messages: Message[]; strip_thinking?: boolean };
+      const { messages, strip_thinking, reasoning_effort } = args as { 
+        messages: Message[];
+        strip_thinking?: boolean;
+        reasoning_effort?: "minimal" | "low" | "medium" | "high";
+      };
       validateMessages(messages, "perplexity_research");
       const stripThinking = typeof strip_thinking === "boolean" ? strip_thinking : false;
-      const result = await performChatCompletion(messages, "sonar-deep-research", stripThinking, serviceOrigin);
+      const options = {
+        ...(reasoning_effort && { reasoning_effort }),
+      };
+      const result = await performChatCompletion(messages, "sonar-deep-research", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -352,6 +398,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
       description: "Analyze a question using step-by-step reasoning with web grounding (Sonar Reasoning Pro model). " +
         "Best for: math, logic, comparisons, complex arguments, and tasks requiring chain-of-thought. " +
         "Returns a reasoned response with numbered citations. " +
+        "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search context size. " +
         "For quick factual questions, use perplexity_ask instead. " +
         "For comprehensive multi-source research, use perplexity_research instead.",
       inputSchema: messagesWithStripThinkingInputSchema as any,
@@ -363,10 +410,21 @@ export function createPerplexityServer(serviceOrigin?: string) {
       },
     },
     async (args: any) => {
-      const { messages, strip_thinking } = args as { messages: Message[]; strip_thinking?: boolean };
+      const { messages, strip_thinking, search_recency_filter, search_domain_filter, search_context_size } = args as { 
+        messages: Message[];
+        strip_thinking?: boolean;
+        search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
+        search_domain_filter?: string[];
+        search_context_size?: "low" | "medium" | "high";
+      };
       validateMessages(messages, "perplexity_reason");
       const stripThinking = typeof strip_thinking === "boolean" ? strip_thinking : false;
-      const result = await performChatCompletion(messages, "sonar-reasoning-pro", stripThinking, serviceOrigin);
+      const options = {
+        ...(search_recency_filter && { search_recency_filter }),
+        ...(search_domain_filter && { search_domain_filter }),
+        ...(search_context_size && { search_context_size }),
+      };
+      const result = await performChatCompletion(messages, "sonar-reasoning-pro", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
