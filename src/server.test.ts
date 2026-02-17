@@ -68,17 +68,17 @@ describe("Server Utility Functions", () => {
       process.env = originalEnv;
     });
 
-    it("should return PERPLEXITY_PROXY when set", () => {
-      process.env.PERPLEXITY_PROXY = "http://perplexity-proxy:8080";
+    it("should return OPENROUTER_PROXY when set", () => {
+      process.env.OPENROUTER_PROXY = "http://openrouter-proxy:8080";
       process.env.HTTPS_PROXY = "http://https-proxy:8080";
       process.env.HTTP_PROXY = "http://http-proxy:8080";
 
       const result = getProxyUrl();
-      expect(result).toBe("http://perplexity-proxy:8080");
+      expect(result).toBe("http://openrouter-proxy:8080");
     });
 
-    it("should return HTTPS_PROXY when PERPLEXITY_PROXY not set", () => {
-      delete process.env.PERPLEXITY_PROXY;
+    it("should return HTTPS_PROXY when OPENROUTER_PROXY not set", () => {
+      delete process.env.OPENROUTER_PROXY;
       process.env.HTTPS_PROXY = "http://https-proxy:8080";
       process.env.HTTP_PROXY = "http://http-proxy:8080";
 
@@ -86,8 +86,8 @@ describe("Server Utility Functions", () => {
       expect(result).toBe("http://https-proxy:8080");
     });
 
-    it("should return HTTP_PROXY when PERPLEXITY_PROXY and HTTPS_PROXY not set", () => {
-      delete process.env.PERPLEXITY_PROXY;
+    it("should return HTTP_PROXY when OPENROUTER_PROXY and HTTPS_PROXY not set", () => {
+      delete process.env.OPENROUTER_PROXY;
       delete process.env.HTTPS_PROXY;
       process.env.HTTP_PROXY = "http://http-proxy:8080";
 
@@ -96,7 +96,7 @@ describe("Server Utility Functions", () => {
     });
 
     it("should return undefined when no proxy set", () => {
-      delete process.env.PERPLEXITY_PROXY;
+      delete process.env.OPENROUTER_PROXY;
       delete process.env.HTTPS_PROXY;
       delete process.env.HTTP_PROXY;
 
@@ -104,8 +104,8 @@ describe("Server Utility Functions", () => {
       expect(result).toBeUndefined();
     });
 
-    it("should prioritize PERPLEXITY_PROXY over others", () => {
-      process.env.PERPLEXITY_PROXY = "http://specific-proxy:8080";
+    it("should prioritize OPENROUTER_PROXY over others", () => {
+      process.env.OPENROUTER_PROXY = "http://specific-proxy:8080";
       process.env.HTTPS_PROXY = "http://general-proxy:8080";
 
       const result = getProxyUrl();
@@ -128,7 +128,7 @@ describe("Server Utility Functions", () => {
     });
 
     it("should use native fetch when no proxy is configured", async () => {
-      delete process.env.PERPLEXITY_PROXY;
+      delete process.env.OPENROUTER_PROXY;
       delete process.env.HTTPS_PROXY;
       delete process.env.HTTP_PROXY;
 
@@ -145,7 +145,7 @@ describe("Server Utility Functions", () => {
     });
 
     it("should NOT use native fetch when proxy is configured", async () => {
-      process.env.PERPLEXITY_PROXY = "http://proxy:8080";
+      process.env.OPENROUTER_PROXY = "http://proxy:8080";
 
       global.fetch = vi.fn().mockResolvedValue(new Response("test"));
 
@@ -159,7 +159,7 @@ describe("Server Utility Functions", () => {
     });
 
     it("should pass through request options to native fetch", async () => {
-      delete process.env.PERPLEXITY_PROXY;
+      delete process.env.OPENROUTER_PROXY;
       delete process.env.HTTPS_PROXY;
       delete process.env.HTTP_PROXY;
 
@@ -181,7 +181,7 @@ describe("Server Utility Functions", () => {
     });
 
     it("should handle fetch errors properly", async () => {
-      delete process.env.PERPLEXITY_PROXY;
+      delete process.env.OPENROUTER_PROXY;
       delete process.env.HTTPS_PROXY;
       delete process.env.HTTP_PROXY;
 

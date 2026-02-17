@@ -6,9 +6,10 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createPerplexityServer } from "./server.js";
 import { logger } from "./logger.js";
 
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
-if (!PERPLEXITY_API_KEY) {
-  logger.error("PERPLEXITY_API_KEY environment variable is required");
+// Check for required API key
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+if (!OPENROUTER_API_KEY) {
+  logger.error("OPENROUTER_API_KEY environment variable is required");
   process.exit(1);
 }
 
@@ -71,7 +72,7 @@ app.get("/health", (req, res) => {
 });
 
 app.listen(PORT, BIND_ADDRESS, () => {
-  logger.info(`Perplexity MCP Server listening on http://${BIND_ADDRESS}:${PORT}/mcp`);
+  logger.info(`Perplexity MCP Server (OpenRouter) listening on http://${BIND_ADDRESS}:${PORT}/mcp`);
   logger.info(`Allowed origins: ${ALLOWED_ORIGINS.join(", ")}`);
 }).on("error", (error) => {
   logger.error("Server error", { error: String(error) });

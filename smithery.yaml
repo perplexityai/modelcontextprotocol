@@ -7,11 +7,11 @@ startCommand:
 configSchema:
   type: "object"
   required:
-    - "PERPLEXITY_API_KEY"
+    - "OPENROUTER_API_KEY"
   properties:
-    PERPLEXITY_API_KEY:
+    OPENROUTER_API_KEY:
       type: "string"
-      description: "Your Perplexity API key from https://www.perplexity.ai/settings/api"
-    PERPLEXITY_TIMEOUT_MS:
+      description: "Your OpenRouter API key from https://openrouter.ai/keys"
+    OPENROUTER_TIMEOUT_MS:
       type: "string"
       description: "Request timeout in milliseconds (default: 300000)"

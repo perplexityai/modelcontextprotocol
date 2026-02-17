@@ -3,9 +3,10 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createPerplexityServer } from "./server.js";
 
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
-if (!PERPLEXITY_API_KEY) {
-  console.error("Error: PERPLEXITY_API_KEY environment variable is required");
+// Check for required API key
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+if (!OPENROUTER_API_KEY) {
+  console.error("Error: OPENROUTER_API_KEY environment variable is required");
   process.exit(1);
 }
 

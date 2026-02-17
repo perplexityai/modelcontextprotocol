@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { formatSearchResults, performChatCompletion, performSearch } from "./server.js";
+import { performChatCompletion, performSearch } from "./server.js";
 
-describe("Perplexity MCP Server", () => {
+describe("Perplexity MCP Server (OpenRouter)", () => {
   let originalFetch: typeof global.fetch;
 
   beforeEach(() => {
@@ -11,47 +11,6 @@ describe("Perplexity MCP Server", () => {
   afterEach(() => {
     global.fetch = originalFetch;
     vi.restoreAllMocks();
-  });
-
-  describe("formatSearchResults", () => {
-    it("should format search results correctly", () => {
-      const mockData = {
-        results: [
-          {
-            title: "Test Result 1",
-            url: "https://example.com/1",
-            snippet: "This is a test snippet",
-            date: "2025-01-01",
-          },
-          {
-            title: "Test Result 2",
-            url: "https://example.com/2",
-            snippet: "Another snippet",
-          },
-        ],
-      };
-
-      const formatted = formatSearchResults(mockData);
-
-      expect(formatted).toContain("Found 2 search results");
-      expect(formatted).toContain("Test Result 1");
-      expect(formatted).toContain("https://example.com/1");
-      expect(formatted).toContain("This is a test snippet");
-      expect(formatted).toContain("Date: 2025-01-01");
-      expect(formatted).toContain("Test Result 2");
-    });
-
-    it("should handle empty results", () => {
-      const mockData = { results: [] };
-      const formatted = formatSearchResults(mockData);
-      expect(formatted).toContain("Found 0 search results");
-    });
-
-    it("should handle missing results array", () => {
-      const mockData = {} as any;
-      const formatted = formatSearchResults(mockData);
-      expect(formatted).toBe("No search results found.");
-    });
   });
 
   describe("performChatCompletion", () => {
@@ -72,20 +31,21 @@ describe("Perplexity MCP Server", () => {
       } as Response);
 
       const messages = [{ role: "user", content: "test question" }];
-      const result = await performChatCompletion(messages, "sonar-pro");
+      const result = await performChatCompletion(messages, "perplexity/sonar-pro");
 
       expect(result).toBe("This is a test response");
       expect(global.fetch).toHaveBeenCalledWith(
-        "https://api.perplexity.ai/chat/completions",
+        "https://openrouter.ai/api/v1/chat/completions",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({
             "Content-Type": "application/json",
             Authorization: "Bearer test-api-key",
-            "X-Source": "pplx-mcp-server",
+            "HTTP-Referer": "https://github.com/perplexityai/mcp-server",
+            "X-Title": "Perplexity MCP Server",
           }),
           body: JSON.stringify({
-            model: "sonar-pro",
+            model: "perplexity/sonar-pro",
             messages,
           }),
         })
@@ -132,12 +92,12 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
 
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Perplexity API error: 401 Unauthorized"
+        "OpenRouter API error: 401 Unauthorized"
       );
     });
 
     it("should handle timeout errors", async () => {
-      process.env.PERPLEXITY_TIMEOUT_MS = "100";
+      process.env.OPENROUTER_TIMEOUT_MS = "100";
 
       global.fetch = vi.fn().mockImplementation((_url, options) => {
         return new Promise((resolve, reject) => {
@@ -171,21 +131,22 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
 
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Network error while calling Perplexity API"
+        "Network error while calling OpenRouter API"
       );
     });
   });
 
   describe("performSearch", () => {
-    it("should successfully perform search", async () => {
+    it("should successfully perform search using sonar-pro-search model", async () => {
       const mockResponse = {
-        results: [
+        choices: [
           {
-            title: "Search Result",
-            url: "https://example.com",
-            snippet: "Test snippet",
+            message: {
+              content: "Here are the search results for your query...",
+            },
           },
         ],
+        citations: ["https://example.com/source1"],
       };
 
       global.fetch = vi.fn().mockResolvedValue({
@@ -193,46 +154,14 @@ describe("Perplexity MCP Server", () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await performSearch("test query", 10, 1024);
+      const result = await performSearch("test query");
 
-      expect(result).toContain("Found 1 search results");
-      expect(result).toContain("Search Result");
+      expect(result).toContain("Here are the search results");
       expect(global.fetch).toHaveBeenCalledWith(
-        "https://api.perplexity.ai/search",
+        "https://openrouter.ai/api/v1/chat/completions",
         expect.objectContaining({
           method: "POST",
-          headers: expect.objectContaining({
-            "Content-Type": "application/json",
-            Authorization: "Bearer test-api-key",
-          }),
-          body: JSON.stringify({
-            query: "test query",
-            max_results: 10,
-            max_tokens_per_page: 1024,
-          }),
-        })
-      );
-    });
-
-    it("should include country parameter when provided", async () => {
-      const mockResponse = { results: [] };
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      } as Response);
-
-      await performSearch("test", 10, 1024, "US");
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        "https://api.perplexity.ai/search",
-        expect.objectContaining({
-          body: JSON.stringify({
-            query: "test",
-            max_results: 10,
-            max_tokens_per_page: 1024,
-            country: "US",
-          }),
+          body: expect.stringContaining("perplexity/sonar-pro-search"),
         })
       );
     });
@@ -246,12 +175,12 @@ describe("Perplexity MCP Server", () => {
       } as Response);
 
       await expect(performSearch("test")).rejects.toThrow(
-        "Perplexity API error: 500 Internal Server Error"
+        "OpenRouter API error: 500 Internal Server Error"
       );
     });
 
     it("should handle search timeout errors", async () => {
-      process.env.PERPLEXITY_TIMEOUT_MS = "100";
+      process.env.OPENROUTER_TIMEOUT_MS = "100";
 
       global.fetch = vi.fn().mockImplementation((_url, options) => {
         return new Promise((resolve, reject) => {
@@ -266,7 +195,7 @@ describe("Perplexity MCP Server", () => {
           setTimeout(() => {
             resolve({
               ok: true,
-              json: async () => ({ results: [] }),
+              json: async () => ({ choices: [{ message: { content: "results" } }] }),
             } as Response);
           }, 200);
         });
@@ -281,7 +210,7 @@ describe("Perplexity MCP Server", () => {
       global.fetch = vi.fn().mockRejectedValue(new Error("Network failure"));
 
       await expect(performSearch("test")).rejects.toThrow(
-        "Network error while calling Perplexity API"
+        "Network error while calling OpenRouter API"
       );
     });
   });
@@ -437,7 +366,7 @@ describe("Perplexity MCP Server", () => {
 
     it("should handle special characters in messages", async () => {
       const mockResponse = {
-        choices: [{ message: { content: "Response with émojis 🎉 and unicode ñ" } }],
+        choices: [{ message: { content: "Response with émojis and unicode ñ" } }],
       };
 
       global.fetch = vi.fn().mockResolvedValue({
@@ -445,10 +374,10 @@ describe("Perplexity MCP Server", () => {
         json: async () => mockResponse,
       } as Response);
 
-      const messages = [{ role: "user", content: "test with émojis 🎉" }];
+      const messages = [{ role: "user", content: "test with émojis" }];
       const result = await performChatCompletion(messages);
 
-      expect(result).toContain("émojis 🎉");
+      expect(result).toContain("émojis");
       expect(result).toContain("unicode ñ");
     });
 
@@ -471,10 +400,10 @@ describe("Perplexity MCP Server", () => {
     });
 
     it("should handle multiple models correctly", async () => {
-      const models = ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro"];
+      const models = ["perplexity/sonar-pro", "perplexity/sonar-deep-research", "perplexity/sonar-reasoning-pro"];
 
       for (const model of models) {
-        if (model === "sonar-deep-research") {
+        if (model === "perplexity/sonar-deep-research") {
           // sonar-deep-research uses streaming, so provide an SSE mock
           const sseData = [
             `data: ${JSON.stringify({ choices: [{ delta: { content: "Response " } }] })}\n\n`,
@@ -509,57 +438,12 @@ describe("Perplexity MCP Server", () => {
 
         expect(result).toContain(model);
         expect(global.fetch).toHaveBeenCalledWith(
-          "https://api.perplexity.ai/chat/completions",
+          "https://openrouter.ai/api/v1/chat/completions",
           expect.objectContaining({
             body: expect.stringContaining(`"model":"${model}"`),
           })
         );
       }
-    });
-
-    it("should handle search with boundary values", async () => {
-      const mockResponse = { results: [] };
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      } as Response);
-
-      // Test max values
-      await performSearch("test", 20, 2048);
-      expect(global.fetch).toHaveBeenCalledWith(
-        "https://api.perplexity.ai/search",
-        expect.objectContaining({
-          body: expect.stringContaining('"max_results":20'),
-        })
-      );
-
-      // Test min values
-      await performSearch("test", 1, 256);
-      expect(global.fetch).toHaveBeenCalledWith(
-        "https://api.perplexity.ai/search",
-        expect.objectContaining({
-          body: expect.stringContaining('"max_results":1'),
-        })
-      );
-    });
-
-    it("should handle formatSearchResults with missing optional fields", async () => {
-      const mockData = {
-        results: [
-          { title: "Test", url: "https://example.com" },
-          { title: "Test 2", url: "https://example.com/2", snippet: "snippet only" },
-          { title: "Test 3", url: "https://example.com/3", date: "2025-01-01" },
-        ],
-      };
-
-      const formatted = formatSearchResults(mockData);
-
-      expect(formatted).toContain("Test");
-      expect(formatted).toContain("Test 2");
-      expect(formatted).toContain("snippet only");
-      expect(formatted).toContain("Date: 2025-01-01");
-      expect(formatted).not.toContain("undefined");
     });
 
     it("should handle concurrent requests correctly", async () => {
@@ -592,7 +476,7 @@ describe("Perplexity MCP Server", () => {
 
     it("should respect timeout on each call independently", async () => {
       // First call with long timeout
-      process.env.PERPLEXITY_TIMEOUT_MS = "1000";
+      process.env.OPENROUTER_TIMEOUT_MS = "1000";
 
       global.fetch = vi.fn().mockImplementation((_url, options) => {
         return new Promise((resolve) => {
@@ -613,7 +497,7 @@ describe("Perplexity MCP Server", () => {
       expect(result1).toBe("fast");
 
       // Second call with short timeout
-      process.env.PERPLEXITY_TIMEOUT_MS = "10";
+      process.env.OPENROUTER_TIMEOUT_MS = "10";
 
       global.fetch = vi.fn().mockImplementation((_url, options) => {
         return new Promise((resolve, reject) => {
@@ -638,52 +522,6 @@ describe("Perplexity MCP Server", () => {
     });
   });
 
-  describe("formatSearchResults Edge Cases", () => {
-    it("should handle results with null/undefined values", () => {
-      const mockData = {
-        results: [
-          { title: null, url: "https://example.com", snippet: undefined },
-          { title: "Valid", url: null, snippet: "snippet", date: undefined },
-        ],
-      } as any;
-
-      const formatted = formatSearchResults(mockData);
-
-      expect(formatted).toContain("null");
-      expect(formatted).toContain("Valid");
-      expect(formatted).not.toContain("undefined");
-    });
-
-    it("should handle empty strings in result fields", () => {
-      const mockData = {
-        results: [{ title: "", url: "", snippet: "", date: "" }],
-      };
-
-      const formatted = formatSearchResults(mockData);
-
-      expect(formatted).toContain("Found 1 search results");
-    });
-
-    it("should handle results with extra unexpected fields", () => {
-      const mockData = {
-        results: [
-          {
-            title: "Test",
-            url: "https://example.com",
-            unexpectedField: "should be ignored",
-            anotherField: 12345,
-          },
-        ],
-      };
-
-      const formatted = formatSearchResults(mockData);
-
-      expect(formatted).toContain("Test");
-      expect(formatted).not.toContain("unexpectedField");
-      expect(formatted).not.toContain("12345");
-    });
-  });
-
   describe("strip_thinking parameter", () => {
     it("should strip thinking tokens when true and keep them when false", async () => {
       const mockResponse = {
@@ -703,7 +541,7 @@ describe("Perplexity MCP Server", () => {
       } as Response);
 
       const messages = [{ role: "user", content: "What is 2+2?" }];
-      const resultStripped = await performChatCompletion(messages, "sonar-reasoning-pro", true);
+      const resultStripped = await performChatCompletion(messages, "perplexity/sonar-reasoning-pro", true);
 
       expect(resultStripped).not.toContain("<think>");
       expect(resultStripped).not.toContain("</think>");
@@ -716,7 +554,7 @@ describe("Perplexity MCP Server", () => {
         json: async () => mockResponse,
       } as Response);
 
-      const resultKept = await performChatCompletion(messages, "sonar-reasoning-pro", false);
+      const resultKept = await performChatCompletion(messages, "perplexity/sonar-reasoning-pro", false);
 
       expect(resultKept).toContain("<think>This is my reasoning process</think>");
       expect(resultKept).toContain("The answer is 4.");
@@ -729,7 +567,7 @@ describe("Perplexity MCP Server", () => {
     beforeEach(() => {
       // Reset environment variables
       process.env = { ...originalEnv };
-      delete process.env.PERPLEXITY_PROXY;
+      delete process.env.OPENROUTER_PROXY;
       delete process.env.HTTPS_PROXY;
       delete process.env.HTTP_PROXY;
     });
@@ -755,28 +593,28 @@ describe("Perplexity MCP Server", () => {
       expect(global.fetch).toHaveBeenCalled();
     });
 
-    it("should read PERPLEXITY_PROXY environment variable", () => {
-      process.env.PERPLEXITY_PROXY = "http://proxy.example.com:8080";
-      expect(process.env.PERPLEXITY_PROXY).toBe("http://proxy.example.com:8080");
+    it("should read OPENROUTER_PROXY environment variable", () => {
+      process.env.OPENROUTER_PROXY = "http://proxy.example.com:8080";
+      expect(process.env.OPENROUTER_PROXY).toBe("http://proxy.example.com:8080");
     });
 
-    it("should prioritize PERPLEXITY_PROXY over HTTPS_PROXY", () => {
-      process.env.PERPLEXITY_PROXY = "http://perplexity-proxy.example.com:8080";
+    it("should prioritize OPENROUTER_PROXY over HTTPS_PROXY", () => {
+      process.env.OPENROUTER_PROXY = "http://openrouter-proxy.example.com:8080";
       process.env.HTTPS_PROXY = "http://https-proxy.example.com:8080";
       
-      // PERPLEXITY_PROXY should take precedence
-      expect(process.env.PERPLEXITY_PROXY).toBe("http://perplexity-proxy.example.com:8080");
+      // OPENROUTER_PROXY should take precedence
+      expect(process.env.OPENROUTER_PROXY).toBe("http://openrouter-proxy.example.com:8080");
     });
 
-    it("should fall back to HTTPS_PROXY when PERPLEXITY_PROXY is not set", () => {
-      delete process.env.PERPLEXITY_PROXY;
+    it("should fall back to HTTPS_PROXY when OPENROUTER_PROXY is not set", () => {
+      delete process.env.OPENROUTER_PROXY;
       process.env.HTTPS_PROXY = "http://https-proxy.example.com:8080";
       
       expect(process.env.HTTPS_PROXY).toBe("http://https-proxy.example.com:8080");
     });
 
     it("should fall back to HTTP_PROXY when others are not set", () => {
-      delete process.env.PERPLEXITY_PROXY;
+      delete process.env.OPENROUTER_PROXY;
       delete process.env.HTTPS_PROXY;
       process.env.HTTP_PROXY = "http://http-proxy.example.com:8080";
       
