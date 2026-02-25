@@ -245,7 +245,7 @@ describe("Perplexity MCP Server", () => {
       } as Response);
 
       await expect(performSearch("test")).rejects.toThrow(
-        "Perplexity Search API error: 500 Internal Server Error"
+        "Perplexity API error: 500 Internal Server Error"
       );
     });
 
@@ -280,7 +280,7 @@ describe("Perplexity MCP Server", () => {
       global.fetch = vi.fn().mockRejectedValue(new Error("Network failure"));
 
       await expect(performSearch("test")).rejects.toThrow(
-        "Network error while calling Perplexity Search API"
+        "Network error while calling Perplexity API"
       );
     });
   });
