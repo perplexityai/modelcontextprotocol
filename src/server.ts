@@ -60,6 +60,61 @@ export function stripThinkingTokens(content: string): string {
   return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
+async function makeApiRequest(
+  endpoint: string,
+  body: Record<string, unknown>,
+  serviceOrigin: string | undefined,
+): Promise<Response> {
+  if (!PERPLEXITY_API_KEY) {
+    throw new Error("PERPLEXITY_API_KEY environment variable is required");
+  }
+
+  // Read timeout fresh each time to respect env var changes
+  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+
+  const url = new URL(`${PERPLEXITY_BASE_URL}/${endpoint}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let response;
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${PERPLEXITY_API_KEY}`,
+    };
+    if (serviceOrigin) {
+      headers["X-Service"] = serviceOrigin;
+    }
+    response = await proxyAwareFetch(url.toString(), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timeout: Perplexity API did not respond within ${TIMEOUT_MS}ms. Consider increasing PERPLEXITY_TIMEOUT_MS.`);
+    }
+    throw new Error(`Network error while calling Perplexity API: ${error}`);
+  }
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    let errorText;
+    try {
+      errorText = await response.text();
+    } catch (parseError) {
+      errorText = "Unable to parse error response";
+    }
+    throw new Error(
+      `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`
+    );
+  }
+
+  return response;
+}
+
 export async function consumeSSEStream(response: Response): Promise<ChatCompletionResponse> {
   const body = response.body;
   if (!body) {
@@ -138,16 +193,8 @@ export async function performChatCompletion(
   serviceOrigin?: string,
   options?: ChatCompletionOptions
 ): Promise<string> {
-  if (!PERPLEXITY_API_KEY) {
-    throw new Error("PERPLEXITY_API_KEY environment variable is required");
-  }
-
-  // Read timeout fresh each time to respect env var changes
-  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
-
   const useStreaming = model === "sonar-deep-research";
 
-  const url = new URL(`${PERPLEXITY_BASE_URL}/chat/completions`);
   const body: Record<string, unknown> = {
     model: model,
     messages: messages,
@@ -158,44 +205,7 @@ export async function performChatCompletion(
     ...(options?.reasoning_effort && { reasoning_effort: options.reasoning_effort }),
   };
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  let response;
-  try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${PERPLEXITY_API_KEY}`,
-    };
-    if (serviceOrigin) {
-      headers["X-Service"] = serviceOrigin;
-    }
-    response = await proxyAwareFetch(url.toString(), {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Request timeout: Perplexity API did not respond within ${TIMEOUT_MS}ms. Consider increasing PERPLEXITY_TIMEOUT_MS.`);
-    }
-    throw new Error(`Network error while calling Perplexity API: ${error}`);
-  }
-
-  if (!response.ok) {
-    let errorText;
-    try {
-      errorText = await response.text();
-    } catch (parseError) {
-      errorText = "Unable to parse error response";
-    }
-    throw new Error(
-      `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`
-    );
-  }
+  const response = await makeApiRequest("chat/completions", body, serviceOrigin);
 
   let data: ChatCompletionResponse;
   try {
@@ -265,59 +275,14 @@ export async function performSearch(
   country?: string,
   serviceOrigin?: string
 ): Promise<string> {
-  if (!PERPLEXITY_API_KEY) {
-    throw new Error("PERPLEXITY_API_KEY environment variable is required");
-  }
-
-  // Read timeout fresh each time to respect env var changes
-  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
-
-  const url = new URL(`${PERPLEXITY_BASE_URL}/search`);
-  const body: SearchRequestBody = {
+  const body: Record<string, unknown> = {
     query: query,
     max_results: maxResults,
     max_tokens_per_page: maxTokensPerPage,
     ...(country && { country }),
   };
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  let response;
-  try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${PERPLEXITY_API_KEY}`,
-    };
-    if (serviceOrigin) {
-      headers["X-Service"] = serviceOrigin;
-    }
-    response = await proxyAwareFetch(url.toString(), {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Request timeout: Perplexity Search API did not respond within ${TIMEOUT_MS}ms. Consider increasing PERPLEXITY_TIMEOUT_MS.`);
-    }
-    throw new Error(`Network error while calling Perplexity Search API: ${error}`);
-  }
-
-  if (!response.ok) {
-    let errorText;
-    try {
-      errorText = await response.text();
-    } catch (parseError) {
-      errorText = "Unable to parse error response";
-    }
-    throw new Error(
-      `Perplexity Search API error: ${response.status} ${response.statusText}\n${errorText}`
-    );
-  }
+  const response = await makeApiRequest("search", body, serviceOrigin);
 
   let data: SearchResponse;
   try {
@@ -408,7 +373,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
-        idempotentHint: true,
+        idempotentHint: false,
+        destructiveHint: false,
       },
     },
     async (args: any) => {
@@ -447,7 +413,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
-        idempotentHint: true,
+        idempotentHint: false,
+        destructiveHint: false,
       },
     },
     async (args: any) => {
@@ -484,7 +451,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
-        idempotentHint: true,
+        idempotentHint: false,
+        destructiveHint: false,
       },
     },
     async (args: any) => {
@@ -537,7 +505,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
-        idempotentHint: true,
+        idempotentHint: false,
+        destructiveHint: false,
       },
     },
     async (args: any) => {
