@@ -373,7 +373,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
-        idempotentHint: true,
+        idempotentHint: false,
+        destructiveHint: false,
       },
     },
     async (args: any) => {
@@ -412,7 +413,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
-        idempotentHint: true,
+        idempotentHint: false,
+        destructiveHint: false,
       },
     },
     async (args: any) => {
@@ -449,7 +451,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
-        idempotentHint: true,
+        idempotentHint: false,
+        destructiveHint: false,
       },
     },
     async (args: any) => {
@@ -502,7 +505,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
-        idempotentHint: true,
+        idempotentHint: false,
+        destructiveHint: false,
       },
     },
     async (args: any) => {
