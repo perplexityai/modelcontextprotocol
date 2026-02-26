@@ -1,6 +1,6 @@
 {
   "name": "@perplexity-ai/mcp-server",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "mcpName": "ai.perplexity/mcp-server",
   "description": "Real-time web search, reasoning, and research through Perplexity's API",
   "keywords": [

@@ -299,7 +299,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
   const server = new McpServer(
     {
       name: "ai.perplexity/mcp-server",
-      version: "0.8.2",
+      version: "0.8.3",
     },
     {
       instructions:
