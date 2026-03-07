@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { formatSearchResults, performChatCompletion, performSearch } from "./server.js";
+import { formatSearchResults, performChatCompletion, performSearch } from "./server";
 
 describe("Perplexity MCP Server", () => {
   let originalFetch: typeof global.fetch;
@@ -131,7 +131,7 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
 
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Perplexity API error: 401 Unauthorized"
+        "Invalid or missing PERPLEXITY_API_KEY."
       );
     });
 
@@ -245,7 +245,7 @@ describe("Perplexity MCP Server", () => {
       } as Response);
 
       await expect(performSearch("test")).rejects.toThrow(
-        "Perplexity API error: 500 Internal Server Error"
+        "Perplexity is currently under high load."
       );
     });
 
@@ -430,7 +430,7 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
 
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Unable to parse error response"
+        "Perplexity is currently under high load."
       );
     });
 

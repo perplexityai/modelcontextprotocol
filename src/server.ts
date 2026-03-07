@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/server/errors.js";
 import { z } from "zod";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 import type {
@@ -8,10 +7,9 @@ import type {
   ChatCompletionOptions,
   SearchResponse,
   UndiciRequestOptions,
-} from "./types.js";
-import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation.js";
+} from "./types";
+import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation";
 
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
 
 const RATE_LIMIT_RETRY_DELAYS_MS: readonly number[] = [2000, 4000, 8000];
@@ -64,6 +62,20 @@ export function stripThinkingTokens(content: string): string {
   return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
+export enum ErrorCode {
+  InvalidParams = -32602,
+}
+
+export class McpError extends Error {
+  code: ErrorCode;
+
+  constructor(code: ErrorCode, message: string) {
+    super(message);
+    this.name = "McpError";
+    this.code = code;
+  }
+}
+
 /**
  * Delay helper used for exponential backoff.
  *
@@ -83,12 +95,13 @@ async function delay(ms: number): Promise<void> {
  * @param body - JSON-serializable request body.
  * @param serviceOrigin - Optional identifier for the calling service.
  */
-async function makeApiRequest(
+export async function makeApiRequest(
   endpoint: string,
   body: Record<string, unknown>,
   serviceOrigin: string | undefined,
 ): Promise<Response> {
-  if (!PERPLEXITY_API_KEY) {
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) {
     throw new Error("Invalid or missing PERPLEXITY_API_KEY.");
   }
 
@@ -97,7 +110,7 @@ async function makeApiRequest(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
+    Authorization: `Bearer ${apiKey}`,
   };
 
   if (serviceOrigin) {
@@ -352,7 +365,7 @@ export async function performSearch(
  * @param toolName - Name of the tool being validated (used in error messages).
  * @param rawArgs - Untrusted arguments received from the client.
  */
-function validateToolArgs<T>(
+export function validateToolArgs<T>(
   schema: z.ZodType<T>,
   toolName: string,
   rawArgs: unknown,
