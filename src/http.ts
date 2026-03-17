@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPerplexityServer } from "./server.js";
@@ -11,6 +11,8 @@ if (!PERPLEXITY_API_KEY) {
   logger.error("PERPLEXITY_API_KEY environment variable is required");
   process.exit(1);
 }
+
+const MCP_SERVER_API_KEY = process.env.MCP_SERVER_API_KEY;
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "8080", 10);
@@ -33,10 +35,36 @@ app.use(cors({
     }
   },
   exposedHeaders: ["Mcp-Session-Id", "mcp-protocol-version"],
-  allowedHeaders: ["Content-Type", "mcp-session-id"],
+  allowedHeaders: ["Content-Type", "mcp-session-id", "Authorization", "X-API-Key"],
 }));
 
 app.use(express.json());
+
+// API key authentication middleware for /mcp endpoint
+app.use("/mcp", (req: Request, res: Response, next: NextFunction) => {
+  if (!MCP_SERVER_API_KEY) {
+    // No API key configured, allow all requests
+    return next();
+  }
+  
+  const authHeader = req.headers.authorization;
+  const apiKeyHeader = req.headers["x-api-key"];
+  const providedKey = apiKeyHeader || authHeader?.replace(/^Bearer\s+/i, "");
+  
+  if (providedKey !== MCP_SERVER_API_KEY) {
+    logger.warn("Unauthorized MCP request", { 
+      hasAuthHeader: !!authHeader, 
+      hasApiKeyHeader: !!apiKeyHeader 
+    });
+    return res.status(401).json({
+      jsonrpc: "2.0",
+      error: { code: -32001, message: "Unauthorized: Invalid or missing API key" },
+      id: null,
+    });
+  }
+  
+  next();
+});
 
 app.all("/mcp", async (req, res) => {
   try {

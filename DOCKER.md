@@ -27,6 +27,19 @@ docker run --rm -p 8080:8080 -e PERPLEXITY_API_KEY=your_key_here perplexity-mcp-
 
 The server will be accessible at `http://localhost:8080/mcp`
 
+### With API Key Protection
+
+Secure the MCP endpoint with an API key:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e PERPLEXITY_API_KEY=your_key_here \
+  -e MCP_SERVER_API_KEY=your_secret_mcp_key \
+  perplexity-mcp-server
+```
+
+Clients must then include the key in requests via `Authorization: Bearer your_secret_mcp_key` or `X-API-Key: your_secret_mcp_key` header.
+
 ### With Custom Timeout
 
 Set a custom timeout for requests (default is 5 minutes):
@@ -64,6 +77,7 @@ Create a `.env` file:
 
 ```bash
 PERPLEXITY_API_KEY=your_key_here
+MCP_SERVER_API_KEY=your_secret_mcp_key
 PERPLEXITY_TIMEOUT_MS=600000
 PERPLEXITY_PROXY=https://your-proxy-host:8080
 PORT=8080

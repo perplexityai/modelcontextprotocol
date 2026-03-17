@@ -147,9 +147,12 @@ For cloud or shared deployments, run the server in HTTP mode.
 |----------|-------------|---------|
 | `PERPLEXITY_API_KEY` | Your Perplexity API key | *Required* |
 | `PERPLEXITY_BASE_URL` | Custom base URL for API requests | `https://api.perplexity.ai` |
+| `MCP_SERVER_API_KEY` | API key to protect the MCP endpoint (optional) | *None* |
 | `PORT` | HTTP server port | `8080` |
 | `BIND_ADDRESS` | Network interface to bind to | `0.0.0.0` |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
+
+> **Note**: When `MCP_SERVER_API_KEY` is set, clients must provide it via `Authorization: Bearer <key>` header or `X-API-Key: <key>` header.
 
 #### Docker
 
