@@ -38,10 +38,12 @@ app.use(cors({
 
 app.use(express.json());
 
-const mcpServer = createPerplexityServer();
-
 app.all("/mcp", async (req, res) => {
   try {
+    // Create a new server instance for each request to avoid
+    // "Already connected to a transport" errors
+    const mcpServer = createPerplexityServer();
+    
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
