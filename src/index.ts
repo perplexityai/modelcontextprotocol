@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createPerplexityServer } from "./server.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio";
+import { createPerplexityServer } from "./server";
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 if (!PERPLEXITY_API_KEY) {

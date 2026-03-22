@@ -2,9 +2,9 @@
 
 import express from "express";
 import cors from "cors";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createPerplexityServer } from "./server.js";
-import { logger } from "./logger.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp";
+import { createPerplexityServer } from "./server";
+import { logger } from "./logger";
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 if (!PERPLEXITY_API_KEY) {

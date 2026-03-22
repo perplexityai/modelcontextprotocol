@@ -8,6 +8,50 @@
 
 The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through Sonar models and the Search API.
 
+## Professional Contributions
+
+- **Strict Zod Validation for Tools**: All MCP tools (`perplexity_search`, `perplexity_ask`, `perplexity_research`, `perplexity_reason`) now validate incoming arguments with strict Zod schemas. Invalid inputs surface as structured MCP errors (`InvalidParams`) with clear, field-level diagnostics instead of failing at runtime.
+- **Exponential Backoff and Resilient Perplexity API Wrapper**: Perplexity API calls are routed through a shared, typed request wrapper that enforces timeouts, retries HTTP 429 responses with exponential backoff (2s, 4s, 8s), and normalizes key failures (401 → “Invalid or missing PERPLEXITY_API_KEY.”, 5xx → “Perplexity is currently under high load.”).
+- **Strict Typing and Production-Grade Error Handling**: The server is implemented with TypeScript `strict` mode, avoiding `any` in production code paths and using explicit interfaces plus Zod inference for tool arguments. Network, timeout, and parsing failures are surfaced with precise, actionable error messages suitable for production observability.
+
+## Installation & Build
+
+### Prerequisites
+
+- Node.js **18+**
+- npm (comes with Node)
+
+### Install Dependencies
+
+```bash
+npm install
+```
+
+### Build the MCP Server
+
+```bash
+npm run build
+```
+
+This runs the TypeScript compiler (`tsc`) and marks the compiled entrypoints in `dist/` as executable.
+
+### Run in STDIO Mode (default for MCP clients)
+
+```bash
+export PERPLEXITY_API_KEY="your_key_here"
+npx -y @perplexity-ai/mcp-server
+```
+
+### Run in HTTP Mode (for cloud / shared deployments)
+
+```bash
+export PERPLEXITY_API_KEY="your_key_here"
+npm run build
+npm run start:http
+```
+
+The HTTP server will listen on `http://localhost:8080/mcp` by default. See the **HTTP Server Deployment** section below for additional environment configuration.
+
 ## Available Tools
 
 ### **perplexity_search**

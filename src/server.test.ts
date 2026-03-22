@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { stripThinkingTokens, getProxyUrl, proxyAwareFetch, validateMessages } from "./server.js";
+import { stripThinkingTokens, getProxyUrl, proxyAwareFetch, validateMessages } from "./server";
 
 describe("Server Utility Functions", () => {
   describe("stripThinkingTokens", () => {

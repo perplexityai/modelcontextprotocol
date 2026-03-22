@@ -6,19 +6,21 @@ import type {
   ChatCompletionResponse,
   ChatCompletionOptions,
   SearchResponse,
-  SearchRequestBody,
-  UndiciRequestOptions
-} from "./types.js";
-import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation.js";
+  UndiciRequestOptions,
+} from "./types";
+import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation";
 
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
 
+const RATE_LIMIT_RETRY_DELAYS_MS: readonly number[] = [2000, 4000, 8000];
+
 export function getProxyUrl(): string | undefined {
-  return process.env.PERPLEXITY_PROXY || 
-         process.env.HTTPS_PROXY || 
-         process.env.HTTP_PROXY || 
-         undefined;
+  return (
+    process.env.PERPLEXITY_PROXY ||
+    process.env.HTTPS_PROXY ||
+    process.env.HTTP_PROXY ||
+    undefined
+  );
 }
 
 export async function proxyAwareFetch(url: string, options: RequestInit = {}): Promise<Response> {
@@ -60,59 +62,119 @@ export function stripThinkingTokens(content: string): string {
   return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
-async function makeApiRequest(
+export enum ErrorCode {
+  InvalidParams = -32602,
+}
+
+export class McpError extends Error {
+  code: ErrorCode;
+
+  constructor(code: ErrorCode, message: string) {
+    super(message);
+    this.name = "McpError";
+    this.code = code;
+  }
+}
+
+/**
+ * Delay helper used for exponential backoff.
+ *
+ * @param ms - Number of milliseconds to wait.
+ */
+async function delay(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(() => resolve(), ms);
+  });
+}
+
+/**
+ * Perform a Perplexity API request with timeout handling, exponential
+ * backoff on HTTP 429, and normalized error messages for key status codes.
+ *
+ * @param endpoint - Relative Perplexity API endpoint (e.g. "chat/completions").
+ * @param body - JSON-serializable request body.
+ * @param serviceOrigin - Optional identifier for the calling service.
+ */
+export async function makeApiRequest(
   endpoint: string,
   body: Record<string, unknown>,
   serviceOrigin: string | undefined,
 ): Promise<Response> {
-  if (!PERPLEXITY_API_KEY) {
-    throw new Error("PERPLEXITY_API_KEY environment variable is required");
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) {
+    throw new Error("Invalid or missing PERPLEXITY_API_KEY.");
   }
 
-  // Read timeout fresh each time to respect env var changes
-  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
-
+  const timeoutMs = Number.parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
   const url = new URL(`${PERPLEXITY_BASE_URL}/${endpoint}`);
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  let response;
-  try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${PERPLEXITY_API_KEY}`,
-    };
-    if (serviceOrigin) {
-      headers["X-Service"] = serviceOrigin;
-    }
-    response = await proxyAwareFetch(url.toString(), {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Request timeout: Perplexity API did not respond within ${TIMEOUT_MS}ms. Consider increasing PERPLEXITY_TIMEOUT_MS.`);
-    }
-    throw new Error(`Network error while calling Perplexity API: ${error}`);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+
+  if (serviceOrigin) {
+    headers["X-Service"] = serviceOrigin;
   }
-  clearTimeout(timeoutId);
 
-  if (!response.ok) {
-    let errorText;
+  let attempt = 0;
+
+  // Retry loop for HTTP 429 with exponential backoff.
+  // Performs an initial attempt plus up to RATE_LIMIT_RETRY_DELAYS_MS.length retries.
+  for (;;) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response: Response;
     try {
-      errorText = await response.text();
-    } catch (parseError) {
-      errorText = "Unable to parse error response";
+      response = await proxyAwareFetch(url.toString(), {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(
+          `Request timeout: Perplexity API did not respond within ${timeoutMs}ms. Consider increasing PERPLEXITY_TIMEOUT_MS.`,
+        );
+      }
+      throw new Error(`Network error while calling Perplexity API: ${String(error)}`);
     }
-    throw new Error(
-      `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`
-    );
-  }
 
-  return response;
+    clearTimeout(timeoutId);
+
+    if (response.status === 429 && attempt < RATE_LIMIT_RETRY_DELAYS_MS.length) {
+      const backoffMs = RATE_LIMIT_RETRY_DELAYS_MS[attempt];
+      attempt += 1;
+      await delay(backoffMs);
+      continue;
+    }
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("Invalid or missing PERPLEXITY_API_KEY.");
+      }
+
+      if (response.status >= 500 && response.status <= 599) {
+        throw new Error("Perplexity is currently under high load.");
+      }
+
+      let errorText: string;
+      try {
+        errorText = await response.text();
+      } catch {
+        errorText = "Unable to parse error response";
+      }
+
+      throw new Error(
+        `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`,
+      );
+    }
+
+    return response;
+  }
 }
 
 export async function consumeSSEStream(response: Response): Promise<ChatCompletionResponse> {
@@ -295,6 +357,37 @@ export async function performSearch(
   return formatSearchResults(data);
 }
 
+/**
+ * Validate raw tool arguments against a Zod schema, throwing a structured
+ * McpError with InvalidParams when validation fails.
+ *
+ * @param schema - Zod schema describing the expected argument shape.
+ * @param toolName - Name of the tool being validated (used in error messages).
+ * @param rawArgs - Untrusted arguments received from the client.
+ */
+export function validateToolArgs<T>(
+  schema: z.ZodType<T>,
+  toolName: string,
+  rawArgs: unknown,
+): T {
+  const result = schema.safeParse(rawArgs);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((issue) => {
+        const path = issue.path.length > 0 ? issue.path.join(".") : "<root>";
+        return `${path}: ${issue.message}`;
+      })
+      .join("; ");
+
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Invalid parameters for ${toolName}: ${issues}`,
+    );
+  }
+
+  return result.data;
+}
+
 export function createPerplexityServer(serviceOrigin?: string) {
   const server = new McpServer(
     {
@@ -316,47 +409,79 @@ export function createPerplexityServer(serviceOrigin?: string) {
     role: z.enum(["system", "user", "assistant"]).describe("Role of the message sender"),
     content: z.string().describe("The content of the message"),
   });
-  
+
   const messagesField = z.array(messageSchema).describe("Array of conversation messages");
-  
-  const stripThinkingField = z.boolean().optional()
-    .describe("If true, removes <think>...</think> tags and their content from the response to save context tokens. Default is false.");
-  
-  const searchRecencyFilterField = z.enum(["hour", "day", "week", "month", "year"]).optional()
-    .describe("Filter search results by recency. Use 'hour' for very recent news, 'day' for today's updates, 'week' for this week, etc.");
-  
-  const searchDomainFilterField = z.array(z.string()).optional()
-    .describe("Restrict search results to specific domains (e.g., ['wikipedia.org', 'arxiv.org']). Use '-' prefix for exclusion (e.g., ['-reddit.com']).");
-  
-  const searchContextSizeField = z.enum(["low", "medium", "high"]).optional()
-    .describe("Controls how much web context is retrieved. 'low' (default) is fastest, 'high' provides more comprehensive results.");
-  
-  const reasoningEffortField = z.enum(["minimal", "low", "medium", "high"]).optional()
+
+  const stripThinkingField = z
+    .boolean()
+    .optional()
+    .describe(
+      "If true, removes <think>...</think> tags and their content from the response to save context tokens. Default is false.",
+    );
+
+  const searchRecencyFilterField = z
+    .enum(["hour", "day", "week", "month", "year"])
+    .optional()
+    .describe(
+      "Filter search results by recency. Use 'hour' for very recent news, 'day' for today's updates, 'week' for this week, etc.",
+    );
+
+  const searchDomainFilterField = z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Restrict search results to specific domains (e.g., ['wikipedia.org', 'arxiv.org']). Use '-' prefix for exclusion (e.g., ['-reddit.com']).",
+    );
+
+  const searchContextSizeField = z
+    .enum(["low", "medium", "high"])
+    .optional()
+    .describe(
+      "Controls how much web context is retrieved. 'low' (default) is fastest, 'high' provides more comprehensive results.",
+    );
+
+  const reasoningEffortField = z
+    .enum(["minimal", "low", "medium", "high"])
+    .optional()
     .describe("Controls depth of deep research reasoning. Higher values produce more thorough analysis.");
-  
+
   const responseOutputSchema = {
     response: z.string().describe("AI-generated text response with numbered citation references"),
   };
 
-  // Input schemas
-  const messagesOnlyInputSchema = { 
-    messages: messagesField,
-    search_recency_filter: searchRecencyFilterField,
-    search_domain_filter: searchDomainFilterField,
-    search_context_size: searchContextSizeField,
-  };
-  const messagesWithStripThinkingInputSchema = { 
-    messages: messagesField, 
-    strip_thinking: stripThinkingField,
-    search_recency_filter: searchRecencyFilterField,
-    search_domain_filter: searchDomainFilterField,
-    search_context_size: searchContextSizeField,
-  };
-  const researchInputSchema = {
-    messages: messagesField,
-    strip_thinking: stripThinkingField,
-    reasoning_effort: reasoningEffortField,
-  };
+  // Strict Zod schemas for tool arguments
+  const perplexityAskArgsSchema = z
+    .object({
+      messages: messagesField,
+      search_recency_filter: searchRecencyFilterField,
+      search_domain_filter: searchDomainFilterField,
+      search_context_size: searchContextSizeField,
+    })
+    .strict();
+
+  type PerplexityAskArgs = z.infer<typeof perplexityAskArgsSchema>;
+
+  const perplexityResearchArgsSchema = z
+    .object({
+      messages: messagesField,
+      strip_thinking: stripThinkingField,
+      reasoning_effort: reasoningEffortField,
+    })
+    .strict();
+
+  type PerplexityResearchArgs = z.infer<typeof perplexityResearchArgsSchema>;
+
+  const perplexityReasonArgsSchema = z
+    .object({
+      messages: messagesField,
+      strip_thinking: stripThinkingField,
+      search_recency_filter: searchRecencyFilterField,
+      search_domain_filter: searchDomainFilterField,
+      search_context_size: searchContextSizeField,
+    })
+    .strict();
+
+  type PerplexityReasonArgs = z.infer<typeof perplexityReasonArgsSchema>;
 
   server.registerTool(
     "perplexity_ask",
@@ -368,8 +493,13 @@ export function createPerplexityServer(serviceOrigin?: string) {
         "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search context size. " +
         "For in-depth multi-source research, use perplexity_research instead. " +
         "For step-by-step reasoning and analysis, use perplexity_reason instead.",
-      inputSchema: messagesOnlyInputSchema as any,
-      outputSchema: responseOutputSchema as any,
+      inputSchema: {
+        messages: messagesField,
+        search_recency_filter: searchRecencyFilterField,
+        search_domain_filter: searchDomainFilterField,
+        search_context_size: searchContextSizeField,
+      },
+      outputSchema: responseOutputSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -377,20 +507,22 @@ export function createPerplexityServer(serviceOrigin?: string) {
         destructiveHint: false,
       },
     },
-    async (args: any) => {
-      const { messages, search_recency_filter, search_domain_filter, search_context_size } = args as { 
-        messages: Message[];
-        search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
-        search_domain_filter?: string[];
-        search_context_size?: "low" | "medium" | "high";
-      };
-      validateMessages(messages, "perplexity_ask");
+    async (rawArgs: unknown) => {
+      const { messages, search_recency_filter, search_domain_filter, search_context_size } =
+        validateToolArgs(perplexityAskArgsSchema, "perplexity_ask", rawArgs);
+
       const options = {
         ...(search_recency_filter && { search_recency_filter }),
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
       };
-      const result = await performChatCompletion(messages, "sonar-pro", false, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const result = await performChatCompletion(
+        messages as Message[],
+        "sonar-pro",
+        false,
+        serviceOrigin,
+        Object.keys(options).length > 0 ? options : undefined,
+      );
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -408,8 +540,12 @@ export function createPerplexityServer(serviceOrigin?: string) {
         "Significantly slower than other tools (30+ seconds). " +
         "For quick factual questions, use perplexity_ask instead. " +
         "For logical analysis and reasoning, use perplexity_reason instead.",
-      inputSchema: researchInputSchema as any,
-      outputSchema: responseOutputSchema as any,
+      inputSchema: {
+        messages: messagesField,
+        strip_thinking: stripThinkingField,
+        reasoning_effort: reasoningEffortField,
+      },
+      outputSchema: responseOutputSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -417,18 +553,23 @@ export function createPerplexityServer(serviceOrigin?: string) {
         destructiveHint: false,
       },
     },
-    async (args: any) => {
-      const { messages, strip_thinking, reasoning_effort } = args as { 
-        messages: Message[];
-        strip_thinking?: boolean;
-        reasoning_effort?: "minimal" | "low" | "medium" | "high";
-      };
-      validateMessages(messages, "perplexity_research");
+    async (rawArgs: unknown) => {
+      const { messages, strip_thinking, reasoning_effort } = validateToolArgs(
+        perplexityResearchArgsSchema,
+        "perplexity_research",
+        rawArgs,
+      );
       const stripThinking = typeof strip_thinking === "boolean" ? strip_thinking : false;
       const options = {
         ...(reasoning_effort && { reasoning_effort }),
       };
-      const result = await performChatCompletion(messages, "sonar-deep-research", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const result = await performChatCompletion(
+        messages as Message[],
+        "sonar-deep-research",
+        stripThinking,
+        serviceOrigin,
+        Object.keys(options).length > 0 ? options : undefined,
+      );
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -446,8 +587,14 @@ export function createPerplexityServer(serviceOrigin?: string) {
         "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search context size. " +
         "For quick factual questions, use perplexity_ask instead. " +
         "For comprehensive multi-source research, use perplexity_research instead.",
-      inputSchema: messagesWithStripThinkingInputSchema as any,
-      outputSchema: responseOutputSchema as any,
+      inputSchema: {
+        messages: messagesField,
+        strip_thinking: stripThinkingField,
+        search_recency_filter: searchRecencyFilterField,
+        search_domain_filter: searchDomainFilterField,
+        search_context_size: searchContextSizeField,
+      },
+      outputSchema: responseOutputSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -455,22 +602,28 @@ export function createPerplexityServer(serviceOrigin?: string) {
         destructiveHint: false,
       },
     },
-    async (args: any) => {
-      const { messages, strip_thinking, search_recency_filter, search_domain_filter, search_context_size } = args as { 
-        messages: Message[];
-        strip_thinking?: boolean;
-        search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
-        search_domain_filter?: string[];
-        search_context_size?: "low" | "medium" | "high";
-      };
-      validateMessages(messages, "perplexity_reason");
+    async (rawArgs: unknown) => {
+      const {
+        messages,
+        strip_thinking,
+        search_recency_filter,
+        search_domain_filter,
+        search_context_size,
+      } = validateToolArgs(perplexityReasonArgsSchema, "perplexity_reason", rawArgs);
+
       const stripThinking = typeof strip_thinking === "boolean" ? strip_thinking : false;
       const options = {
         ...(search_recency_filter && { search_recency_filter }),
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
       };
-      const result = await performChatCompletion(messages, "sonar-reasoning-pro", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const result = await performChatCompletion(
+        messages as Message[],
+        "sonar-reasoning-pro",
+        stripThinking,
+        serviceOrigin,
+        Object.keys(options).length > 0 ? options : undefined,
+      );
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -478,18 +631,40 @@ export function createPerplexityServer(serviceOrigin?: string) {
     }
   );
 
-  const searchInputSchema = {
-    query: z.string().describe("Search query string"),
-    max_results: z.number().min(1).max(20).optional()
-      .describe("Maximum number of results to return (1-20, default: 10)"),
-    max_tokens_per_page: z.number().min(256).max(2048).optional()
-      .describe("Maximum tokens to extract per webpage (default: 1024)"),
-    country: z.string().optional()
-      .describe("ISO 3166-1 alpha-2 country code for regional results (e.g., 'US', 'GB')"),
-  };
-  
+  const perplexitySearchArgsSchema = z
+    .object({
+      query: z
+        .string()
+        .min(1, "query must be a non-empty string")
+        .describe("Search query string"),
+      max_results: z
+        .number()
+        .int()
+        .min(1)
+        .max(20)
+        .optional()
+        .describe("Maximum number of results to return (1-20, default: 10)"),
+      max_tokens_per_page: z
+        .number()
+        .int()
+        .min(256)
+        .max(2048)
+        .optional()
+        .describe("Maximum tokens to extract per webpage (default: 1024)"),
+      country: z
+        .string()
+        .length(2)
+        .optional()
+        .describe("ISO 3166-1 alpha-2 country code for regional results (e.g., 'US', 'GB')"),
+    })
+    .strict();
+
+  type PerplexitySearchArgs = z.infer<typeof perplexitySearchArgsSchema>;
+
   const searchOutputSchema = {
-    results: z.string().describe("Formatted search results, each with title, URL, snippet, and date"),
+    results: z
+      .string()
+      .describe("Formatted search results, each with title, URL, snippet, and date"),
   };
 
   server.registerTool(
@@ -500,8 +675,13 @@ export function createPerplexityServer(serviceOrigin?: string) {
         "Best for: finding specific URLs, checking recent news, verifying facts, discovering sources. " +
         "Returns formatted results (title, URL, snippet, date) — no AI synthesis. " +
         "For AI-generated answers with citations, use perplexity_ask instead.",
-      inputSchema: searchInputSchema as any,
-      outputSchema: searchOutputSchema as any,
+      inputSchema: {
+        query: perplexitySearchArgsSchema.shape.query,
+        max_results: perplexitySearchArgsSchema.shape.max_results,
+        max_tokens_per_page: perplexitySearchArgsSchema.shape.max_tokens_per_page,
+        country: perplexitySearchArgsSchema.shape.country,
+      },
+      outputSchema: searchOutputSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -509,18 +689,22 @@ export function createPerplexityServer(serviceOrigin?: string) {
         destructiveHint: false,
       },
     },
-    async (args: any) => {
-      const { query, max_results, max_tokens_per_page, country } = args as {
-        query: string;
-        max_results?: number;
-        max_tokens_per_page?: number;
-        country?: string;
-      };
+    async (rawArgs: unknown) => {
+      const { query, max_results, max_tokens_per_page, country }: PerplexitySearchArgs =
+        validateToolArgs(perplexitySearchArgsSchema, "perplexity_search", rawArgs);
+
       const maxResults = typeof max_results === "number" ? max_results : 10;
-      const maxTokensPerPage = typeof max_tokens_per_page === "number" ? max_tokens_per_page : 1024;
+      const maxTokensPerPage =
+        typeof max_tokens_per_page === "number" ? max_tokens_per_page : 1024;
       const countryCode = typeof country === "string" ? country : undefined;
-      
-      const result = await performSearch(query, maxResults, maxTokensPerPage, countryCode, serviceOrigin);
+
+      const result = await performSearch(
+        query,
+        maxResults,
+        maxTokensPerPage,
+        countryCode,
+        serviceOrigin,
+      );
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { results: result },

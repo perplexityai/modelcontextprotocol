@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createPerplexityServer } from "./server.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createPerplexityServer } from "./server";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp";
 import express from "express";
 import cors from "cors";
 import { Server } from "http";
