@@ -35,7 +35,7 @@
     ".claude-plugin"
   ],
   "scripts": {
-    "build": "tsc && shx chmod +x dist/*.js",
+    "build": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --skipLibCheck --noEmitOnError false && shx chmod +x dist/*.js",
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
