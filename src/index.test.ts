@@ -79,10 +79,11 @@ describe("Perplexity MCP Server", () => {
         "https://api.perplexity.ai/chat/completions",
         expect.objectContaining({
           method: "POST",
-          headers: {
+          headers: expect.objectContaining({
             "Content-Type": "application/json",
             Authorization: "Bearer test-api-key",
-          },
+            "X-Source": "pplx-mcp-server",
+          }),
           body: JSON.stringify({
             model: "sonar-pro",
             messages,
@@ -200,10 +201,10 @@ describe("Perplexity MCP Server", () => {
         "https://api.perplexity.ai/search",
         expect.objectContaining({
           method: "POST",
-          headers: {
+          headers: expect.objectContaining({
             "Content-Type": "application/json",
             Authorization: "Bearer test-api-key",
-          },
+          }),
           body: JSON.stringify({
             query: "test query",
             max_results: 10,
