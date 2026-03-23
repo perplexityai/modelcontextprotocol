@@ -13,7 +13,7 @@ import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
-const VERSION = "0.8.4";
+const VERSION = "0.8.5";
 
 export function getProxyUrl(): string | undefined {
   return process.env.PERPLEXITY_PROXY || 
