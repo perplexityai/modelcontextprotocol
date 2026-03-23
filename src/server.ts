@@ -13,6 +13,7 @@ import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
+const VERSION = "0.8.4";
 
 export function getProxyUrl(): string | undefined {
   return process.env.PERPLEXITY_PROXY || 
@@ -81,6 +82,8 @@ async function makeApiRequest(
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${PERPLEXITY_API_KEY}`,
+      "User-Agent": `perplexity-mcp/${VERSION}`,
+      "X-Source": "mcp-server",
     };
     if (serviceOrigin) {
       headers["X-Service"] = serviceOrigin;
@@ -299,7 +302,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
   const server = new McpServer(
     {
       name: "ai.perplexity/mcp-server",
-      version: "0.8.4",
+      version: VERSION,
     },
     {
       instructions:
