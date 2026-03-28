@@ -1,6 +1,6 @@
 {
   "name": "@perplexity-ai/mcp-server",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "mcpName": "ai.perplexity/mcp-server",
   "description": "Real-time web search, reasoning, and research through Perplexity's API",
   "keywords": [
@@ -64,7 +64,8 @@
     "shx": "^0.4.0",
     "tsx": "^4.19.4",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.5"
+    "vitest": "^4.0.5",
+    "picomatch": ">=4.0.4"
   },
   "engines": {
     "node": ">=18"
