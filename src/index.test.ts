@@ -431,7 +431,7 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
 
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Unable to parse error response"
+        "Perplexity API error: 500 Internal Server Error"
       );
     });
 
