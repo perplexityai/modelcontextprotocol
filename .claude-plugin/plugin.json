@@ -1,0 +1,21 @@
+{
+  "name": "perplexity",
+  "description": "Official Perplexity AI plugin providing real-time web search, reasoning, and research capabilities",
+  "version": "0.9.0",
+  "author": {
+    "name": "Perplexity AI",
+    "email": "api@perplexity.ai"
+  },
+  "homepage": "https://docs.perplexity.ai/guides/mcp-server",
+  "repository": "https://github.com/perplexityai/modelcontextprotocol",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "search",
+    "web-search",
+    "perplexity",
+    "research",
+    "reasoning",
+    "ai"
+  ]
+}

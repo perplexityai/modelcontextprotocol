@@ -32,7 +32,8 @@
     "!dist/*.test.js",
     "!dist/vitest.config.js",
     "README.md",
-    ".claude-plugin"
+    ".claude-plugin",
+    ".mcp.json"
   ],
   "scripts": {
     "build": "tsc && shx chmod +x dist/*.js",
