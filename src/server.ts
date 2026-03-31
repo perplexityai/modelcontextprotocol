@@ -103,7 +103,7 @@ async function makeApiRequest(
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`Request timeout: Perplexity API did not respond within ${TIMEOUT_MS}ms. Consider increasing PERPLEXITY_TIMEOUT_MS.`);
-      }
+    }
     throw new Error(`Network error while calling Perplexity API: ${error}`);
   }
   clearTimeout(timeoutId);
