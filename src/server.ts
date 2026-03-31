@@ -13,6 +13,11 @@ import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
+
+const SONAR_PRO_MODEL = process.env.SONAR_PRO_MODEL || "sonar-pro";
+const SONAR_REASONING_MODEL = process.env.SONAR_REASONING_MODEL || "sonar-reasoning-pro";
+const SONAR_DEEP_RESEARCH_MODEL = process.env.SONAR_DEEP_RESEARCH_MODEL || "sonar-deep-research";
+
 const VERSION = "0.9.0";
 
 export function getProxyUrl(): string | undefined {
@@ -191,12 +196,12 @@ export async function consumeSSEStream(response: Response): Promise<ChatCompleti
 
 export async function performChatCompletion(
   messages: Message[],
-  model: string = "sonar-pro",
+  model: string = SONAR_PRO_MODEL,
   stripThinking: boolean = false,
   serviceOrigin?: string,
   options?: ChatCompletionOptions
 ): Promise<string> {
-  const useStreaming = model === "sonar-deep-research";
+  const useStreaming = model === SONAR_DEEP_RESEARCH_MODEL;
 
   const body: Record<string, unknown> = {
     model: model,
@@ -393,7 +398,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
       };
-      const result = await performChatCompletion(messages, "sonar-pro", false, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const result = await performChatCompletion(messages, SONAR_PRO_MODEL, false, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -431,7 +436,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
       const options = {
         ...(reasoning_effort && { reasoning_effort }),
       };
-      const result = await performChatCompletion(messages, "sonar-deep-research", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const result = await performChatCompletion(messages, SONAR_DEEP_RESEARCH_MODEL, stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -473,7 +478,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
       };
-      const result = await performChatCompletion(messages, "sonar-reasoning-pro", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const result = await performChatCompletion(messages, SONAR_REASONING_MODEL, stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
