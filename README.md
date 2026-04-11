@@ -4,6 +4,8 @@
 &nbsp;
 [![Install in VS Code](https://custom-icon-badges.demolab.com/badge/Install_in_VS_Code-007ACC?style=for-the-badge&logo=vsc&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=perplexity&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22%22%7D%7D)
 &nbsp;
+[![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=perplexity&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22your_key_here%22%7D%7D)
+&nbsp;
 [![npm version](https://img.shields.io/npm/v/%40perplexity-ai%2Fmcp-server?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@perplexity-ai/mcp-server)
 
 The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through Sonar models and the Search API.
@@ -101,6 +103,28 @@ We recommend using the one-click install badge at the top of this README for VS 
 ```bash
 codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
 ```
+
+### Kiro
+
+[![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=perplexity&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22your_key_here%22%7D%7D)
+
+Or manually add to your `.kiro/settings/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "perplexity": {
+      "command": "npx",
+      "args": ["-y", "@perplexity-ai/mcp-server"],
+      "env": {
+        "PERPLEXITY_API_KEY": "your_key_here"
+      }
+    }
+  }
+}
+```
+
+For more information, see the [Kiro MCP documentation](https://kiro.dev/docs/mcp/).
 
 ### Other MCP Clients
 
