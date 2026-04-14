@@ -53,7 +53,13 @@ claude
 # Then run: /plugin install perplexity
 ```
 
-### Cursor, Claude Desktop, Kiro, and Windsurf
+### Codex
+
+```bash
+codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
+```
+
+### Cursor, Claude Desktop, Kiro, Windsurf, and VS Code
 
 Most clients can be configured manually using the same `mcpServers` wrapper in their client config (as shown for Cursor). If a client has a different schema, check its docs for the exact wrapper format.
 
@@ -79,11 +85,6 @@ For manual setup, these clients all use the same `mcpServers` structure:
     }
   }
 }
-```
-### Codex
-
-```bash
-codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
 ```
 
 ### Proxy Setup (For Corporate Networks)
