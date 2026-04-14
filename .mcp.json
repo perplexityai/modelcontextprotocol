@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "perplexity": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@perplexity-ai/mcp-server"],
+      "env": {
+        "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}",
+        "PERPLEXITY_TIMEOUT_MS": "${PERPLEXITY_TIMEOUT_MS:-600000}"
+      }
+    }
+  }
+}
