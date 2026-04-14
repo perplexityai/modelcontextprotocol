@@ -53,17 +53,19 @@ claude
 # Then run: /plugin install perplexity
 ```
 
-### Cursor, Claude Desktop & Windsurf
+### Cursor, Claude Desktop, Kiro, and Windsurf
 
-We recommend using the one-click install badge at the top of this README for Cursor.
+Most clients can be configured manually using the same `mcpServers` wrapper in their client config (as shown for Cursor). If a client has a different schema, check its docs for the exact wrapper format.
 
-For manual setup, all these clients use the same `mcpServers` format:
+For manual setup, these clients all use the same `mcpServers` structure:
 
 | Client | Config File |
 |--------|-------------|
 | Cursor | `~/.cursor/mcp.json` |
 | Claude Desktop | `claude_desktop_config.json` |
+| Kiro | `.kiro/settings/mcp.json` |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| VS Code | `.vscode/mcp.json` |
 
 ```json
 {
@@ -78,57 +80,11 @@ For manual setup, all these clients use the same `mcpServers` format:
   }
 }
 ```
-
-### VS Code
-
-We recommend using the one-click install badge at the top of this README for VS Code, or for manual setup, add to `.vscode/mcp.json`:
-
-```json
-{
-  "servers": {
-    "perplexity": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@perplexity-ai/mcp-server"],
-      "env": {
-        "PERPLEXITY_API_KEY": "your_key_here"
-      }
-    }
-  }
-}
-```
-
 ### Codex
 
 ```bash
 codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
 ```
-
-### Kiro
-
-[![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=perplexity&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22your_key_here%22%7D%7D)
-
-Or manually add to your `.kiro/settings/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "perplexity": {
-      "command": "npx",
-      "args": ["-y", "@perplexity-ai/mcp-server"],
-      "env": {
-        "PERPLEXITY_API_KEY": "your_key_here"
-      }
-    }
-  }
-}
-```
-
-For more information, see the [Kiro MCP documentation](https://kiro.dev/docs/mcp/).
-
-### Other MCP Clients
-
-Most clients can be manually configured to use the `mcpServers` wrapper in their configuration file (like Cursor). If your client doesn't work, check its documentation for the correct wrapper format.
 
 ### Proxy Setup (For Corporate Networks)
 
@@ -203,4 +159,3 @@ The server will be accessible at `http://localhost:8080/mcp`
 For support, visit [community.perplexity.ai](https://community.perplexity.ai) or [file an issue](https://github.com/perplexityai/modelcontextprotocol/issues).
 
 ---
-
