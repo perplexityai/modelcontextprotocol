@@ -4,6 +4,8 @@
 &nbsp;
 [![Install in VS Code](https://custom-icon-badges.demolab.com/badge/Install_in_VS_Code-007ACC?style=for-the-badge&logo=vsc&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=perplexity&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22%22%7D%7D)
 &nbsp;
+[![Add to Kiro](https://img.shields.io/badge/Add_to_Kiro-9046FF?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkxIiBoZWlnaHQ9IjIyNi44MTQiIHZpZXdCb3g9IjAgMCAxOTEgMjI2LjgxNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMzUuNjA5IDE3My4xNjVjLTIzLjExMSA1MS4yMzUgMjYuMTA2IDY0LjA2OCA2Mi4zOTYgMzQuMTA2IDEwLjY2IDMzLjYwNSA1MC42OTggOC41MzQgNjUuMDU5LTE3LjUxMSAzMS42MzQtNTcuMzgzIDE4Ljg2Mi0xMTUuOTM3IDE1LjU3OS0xMjguMDE3LTIyLjUwMi04Mi4zNTctMTM0LjkyOS04Mi40MjktMTU0LjI4MS40MTgtNC41MjMgMTQuNTA1LTQuNTk1IDMxLjAwMy03LjE2MSA0OC4xMzItMS4yOSA4LjYzMS0yLjE5OCAxNC4xNDUtNS41MzkgMjMuMjMtMS45MjEgNS4yMTgtNC41NTkgOS44NDktOC43MTQgMTcuNjY2LTguMjEzIDEyLjU0NS4xNTUgMzguMiAzMi42NSAyMi4wMDF6IiBmaWxsPSIjZmZmIi8+PHBhdGggZD0iTTEwMi42MDMgOTYuODk4Yy05LjIyOSAwLTEwLjYxMy0xMS4wMzEtMTAuNjEzLTE3LjU5NyAwLTUuOTMyIDEuMDc0LTEwLjY0OSAzLjA2Ny0xMy42NDRhOC41OCA4LjU4IDAgMCAxIDcuNTIxLTMuOTY0YzMuMjM2IDAgNi4wMDQgMS4zNjIgNy45NjEgNC4wMzYgMi4yMDkgMy4wNDUgMy4zOTEgNy43NTkgMy4zOTEgMTMuNTg2IDAgMTEuMDE3LTQuMjM4IDE3LjU5Ny0xMS4zNDEgMTcuNTk3em0zNy45NDggMGMtOS4yNCAwLTEwLjYyNC0xMS4wMzEtMTAuNjI0LTE3LjU5NyAwLTUuOTMyIDEuMDc0LTEwLjY0OSAzLjA4MS0xMy42NDRhOC41OCA4LjU4IDAgMCAxIDcuNTIxLTMuOTY0IDkuNTEgOS41MSAwIDAgMSA3Ljk1IDQuMDM2YzIuMjIgMy4wNDUgMy40MDIgNy43NTkgMy40MDIgMTMuNTg2IDAgMTEuMDE3LTQuMjM4IDE3LjU5Ny0xMS4zNDEgMTcuNTk3eiIgZmlsbD0iIzAwMCIvPlw8L3N2Zz4=&logoColor=white)](https://kiro.dev/launch/mcp/add?name=perplexity&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22your_key_here%22%7D%7D)
+&nbsp;
 [![npm version](https://img.shields.io/npm/v/%40perplexity-ai%2Fmcp-server?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@perplexity-ai/mcp-server)
 
 The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through Sonar models and the Search API.
@@ -51,17 +53,25 @@ claude
 # Then run: /plugin install perplexity
 ```
 
-### Cursor, Claude Desktop & Windsurf
+### Codex
 
-We recommend using the one-click install badge at the top of this README for Cursor.
+```bash
+codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
+```
 
-For manual setup, all these clients use the same `mcpServers` format:
+### Cursor, Claude Desktop, Kiro, Windsurf, and VS Code
+
+Most clients can be configured manually using the same `mcpServers` wrapper in their client config (as shown for Cursor). If a client has a different schema, check its docs for the exact wrapper format.
+
+For manual setup, these clients all use the same `mcpServers` structure:
 
 | Client | Config File |
 |--------|-------------|
 | Cursor | `~/.cursor/mcp.json` |
 | Claude Desktop | `claude_desktop_config.json` |
+| Kiro | `.kiro/settings/mcp.json` |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| VS Code | `.vscode/mcp.json` |
 
 ```json
 {
@@ -76,35 +86,6 @@ For manual setup, all these clients use the same `mcpServers` format:
   }
 }
 ```
-
-### VS Code
-
-We recommend using the one-click install badge at the top of this README for VS Code, or for manual setup, add to `.vscode/mcp.json`:
-
-```json
-{
-  "servers": {
-    "perplexity": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@perplexity-ai/mcp-server"],
-      "env": {
-        "PERPLEXITY_API_KEY": "your_key_here"
-      }
-    }
-  }
-}
-```
-
-### Codex
-
-```bash
-codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
-```
-
-### Other MCP Clients
-
-Most clients can be manually configured to use the `mcpServers` wrapper in their configuration file (like Cursor). If your client doesn't work, check its documentation for the correct wrapper format.
 
 ### Proxy Setup (For Corporate Networks)
 
@@ -179,4 +160,3 @@ The server will be accessible at `http://localhost:8080/mcp`
 For support, visit [community.perplexity.ai](https://community.perplexity.ai) or [file an issue](https://github.com/perplexityai/modelcontextprotocol/issues).
 
 ---
-
