@@ -418,20 +418,54 @@ describe("Perplexity MCP Server", () => {
       );
     });
 
-    it("should handle error text parse failures", async () => {
+    it("should not expose JSON parse error details", async () => {
       global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: "Internal Server Error",
-        text: async () => {
-          throw new Error("Cannot read error");
+        ok: true,
+        json: async () => {
+          throw new Error("Invalid JSON containing secret_token=abc123");
         },
       } as unknown as Response);
 
       const messages = [{ role: "user", content: "test" }];
 
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Unable to parse error response"
+        "Failed to parse JSON response from Perplexity API"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "secret_token=abc123"
+      );
+    });
+
+    it("should not expose network error details", async () => {
+      global.fetch = vi.fn().mockRejectedValue(
+        new Error("Network failure with credential=private-token")
+      );
+
+      const messages = [{ role: "user", content: "test" }];
+
+      await expect(performChatCompletion(messages)).rejects.toThrow(
+        "Network error while calling Perplexity API"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "credential=private-token"
+      );
+    });
+
+    it("should not expose upstream error response details", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        text: async () => "internal_trace=abc123; account=private-tier",
+      } as Response);
+
+      const messages = [{ role: "user", content: "test" }];
+
+      await expect(performChatCompletion(messages)).rejects.toThrow(
+        "Perplexity API error: 500 Internal Server Error"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "internal_trace=abc123"
       );
     });
 

@@ -10,6 +10,7 @@ import type {
   UndiciRequestOptions
 } from "./types.js";
 import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation.js";
+import { logger } from "./logger.js";
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
@@ -99,7 +100,8 @@ async function makeApiRequest(
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`Request timeout: Perplexity API did not respond within ${TIMEOUT_MS}ms. Consider increasing PERPLEXITY_TIMEOUT_MS.`);
     }
-    throw new Error(`Network error while calling Perplexity API: ${error}`);
+    logger.error("Network error while calling Perplexity API", { error: String(error) });
+    throw new Error("Network error while calling Perplexity API");
   }
   clearTimeout(timeoutId);
 
@@ -110,8 +112,13 @@ async function makeApiRequest(
     } catch (parseError) {
       errorText = "Unable to parse error response";
     }
+    logger.error("Perplexity API error", {
+      status: response.status,
+      statusText: response.statusText,
+      body: errorText,
+    });
     throw new Error(
-      `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`
+      `Perplexity API error: ${response.status} ${response.statusText}`
     );
   }
 
@@ -228,7 +235,8 @@ export async function performChatCompletion(
         throw new Error("Invalid API response: missing or empty choices array");
       }
     }
-    throw new Error(`Failed to parse JSON response from Perplexity API: ${error}`);
+    logger.error("Failed to parse JSON response from Perplexity API", { error: String(error) });
+    throw new Error("Failed to parse JSON response from Perplexity API");
   }
 
   const firstChoice = data.choices[0];
@@ -292,7 +300,8 @@ export async function performSearch(
     const json = await response.json();
     data = SearchResponseSchema.parse(json);
   } catch (error) {
-    throw new Error(`Failed to parse JSON response from Perplexity Search API: ${error}`);
+    logger.error("Failed to parse JSON response from Perplexity Search API", { error: String(error) });
+    throw new Error("Failed to parse JSON response from Perplexity Search API");
   }
 
   return formatSearchResults(data);
