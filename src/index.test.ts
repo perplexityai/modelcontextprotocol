@@ -418,20 +418,21 @@ describe("Perplexity MCP Server", () => {
       );
     });
 
-    it("should handle error text parse failures", async () => {
+    it("should not expose upstream error response details", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 500,
         statusText: "Internal Server Error",
-        text: async () => {
-          throw new Error("Cannot read error");
-        },
-      } as unknown as Response);
+        text: async () => "internal_trace=abc123; account=private-tier",
+      } as Response);
 
       const messages = [{ role: "user", content: "test" }];
 
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Unable to parse error response"
+        "Perplexity API error: 500 Internal Server Error"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "internal_trace=abc123"
       );
     });
 
