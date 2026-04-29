@@ -418,6 +418,39 @@ describe("Perplexity MCP Server", () => {
       );
     });
 
+    it("should not expose JSON parse error details", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => {
+          throw new Error("Invalid JSON containing secret_token=abc123");
+        },
+      } as unknown as Response);
+
+      const messages = [{ role: "user", content: "test" }];
+
+      await expect(performChatCompletion(messages)).rejects.toThrow(
+        "Failed to parse JSON response from Perplexity API"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "secret_token=abc123"
+      );
+    });
+
+    it("should not expose network error details", async () => {
+      global.fetch = vi.fn().mockRejectedValue(
+        new Error("Network failure with credential=private-token")
+      );
+
+      const messages = [{ role: "user", content: "test" }];
+
+      await expect(performChatCompletion(messages)).rejects.toThrow(
+        "Network error while calling Perplexity API"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "credential=private-token"
+      );
+    });
+
     it("should not expose upstream error response details", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
