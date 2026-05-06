@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
@@ -8,6 +9,9 @@ import type {
   UndiciRequestOptions
 } from "./types.js";
 import { ChatCompletionResponseSchema } from "./validation.js";
+
+const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
+const VERSION = pkg.version;
 
 // Retrieve the OpenRouter API key and base URL from environment variables
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -278,7 +282,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
   const server = new McpServer(
     {
       name: "ai.perplexity/mcp-server",
-      version: "1.0.0",
+      version: VERSION,
     },
     {
       instructions:
