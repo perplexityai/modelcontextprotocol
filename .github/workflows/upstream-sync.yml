@@ -111,8 +111,10 @@ jobs:
           EOF
           )
 
-          # Ensure label exists (no-op if it does)
-          gh label create "${ISSUE_LABEL}" --color "ededed" --description "Upstream sync notifications" 2>/dev/null || true
+          # Ensure label exists. Idempotent and surfaces real errors.
+          if ! gh label list --json name --jq '.[].name' | grep -qx "${ISSUE_LABEL}"; then
+            gh label create "${ISSUE_LABEL}" --color "ededed" --description "Upstream sync notifications"
+          fi
 
           EXISTING=$(gh issue list --label "${ISSUE_LABEL}" --state open --json number --jq '.[0].number' || true)
 
