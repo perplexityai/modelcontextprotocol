@@ -111,18 +111,21 @@ jobs:
           EOF
           )
 
+          # Pin every gh call to the fork — `git remote add upstream` confuses gh's auto-detection.
+          REPO="${GITHUB_REPOSITORY}"
+
           # Ensure label exists. Idempotent and surfaces real errors.
-          if ! gh label list --json name --jq '.[].name' | grep -qx "${ISSUE_LABEL}"; then
-            gh label create "${ISSUE_LABEL}" --color "ededed" --description "Upstream sync notifications"
+          if ! gh label list --repo "${REPO}" --json name --jq '.[].name' | grep -qx "${ISSUE_LABEL}"; then
+            gh label create "${ISSUE_LABEL}" --repo "${REPO}" --color "ededed" --description "Upstream sync notifications"
           fi
 
-          EXISTING=$(gh issue list --label "${ISSUE_LABEL}" --state open --json number --jq '.[0].number' || true)
+          EXISTING=$(gh issue list --repo "${REPO}" --label "${ISSUE_LABEL}" --state open --json number --jq '.[0].number' || true)
 
           if [ -n "${EXISTING}" ]; then
-            gh issue edit "${EXISTING}" --title "${TITLE}" --body "${BODY}"
+            gh issue edit "${EXISTING}" --repo "${REPO}" --title "${TITLE}" --body "${BODY}"
             echo "Updated issue #${EXISTING}"
           else
-            gh issue create --title "${TITLE}" --body "${BODY}" --label "${ISSUE_LABEL}"
+            gh issue create --repo "${REPO}" --title "${TITLE}" --body "${BODY}" --label "${ISSUE_LABEL}"
           fi
 
       - name: Close stale sync issue
@@ -130,7 +133,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          EXISTING=$(gh issue list --label "${ISSUE_LABEL}" --state open --json number --jq '.[0].number' || true)
+          REPO="${GITHUB_REPOSITORY}"
+          EXISTING=$(gh issue list --repo "${REPO}" --label "${ISSUE_LABEL}" --state open --json number --jq '.[0].number' || true)
           if [ -n "${EXISTING}" ]; then
-            gh issue close "${EXISTING}" --comment "Fork is now up-to-date with upstream. Closing automatically."
+            gh issue close "${EXISTING}" --repo "${REPO}" --comment "Fork is now up-to-date with upstream. Closing automatically."
           fi
