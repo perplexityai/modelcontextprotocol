@@ -617,8 +617,59 @@ describe("Perplexity MCP Server (OpenRouter)", () => {
       delete process.env.OPENROUTER_PROXY;
       delete process.env.HTTPS_PROXY;
       process.env.HTTP_PROXY = "http://http-proxy.example.com:8080";
-      
+
       expect(process.env.HTTP_PROXY).toBe("http://http-proxy.example.com:8080");
+    });
+  });
+
+  describe("OpenRouter migration regression guards", () => {
+    function callArgs() {
+      const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      return { url, headers: (init.headers ?? {}) as Record<string, string> };
+    }
+
+    beforeEach(() => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+      } as Response);
+    });
+
+    it("targets openrouter.ai and never api.perplexity.ai", async () => {
+      await performChatCompletion(
+        [{ role: "user", content: "hi" }],
+        "perplexity/sonar-pro"
+      );
+
+      const { url } = callArgs();
+      expect(url).toMatch(/^https:\/\/openrouter\.ai\/api\/v1\//);
+      expect(url).not.toMatch(/api\.perplexity\.ai/);
+    });
+
+    it("does not send legacy Perplexity-only headers", async () => {
+      await performChatCompletion(
+        [{ role: "user", content: "hi" }],
+        "perplexity/sonar-pro"
+      );
+
+      const { headers } = callArgs();
+      const keys = Object.keys(headers).map((k) => k.toLowerCase());
+
+      expect(keys).not.toContain("x-source");
+      expect(keys).not.toContain("user-agent");
+
+      // Sanity: the new OpenRouter-required headers are present.
+      expect(headers["HTTP-Referer"]).toBeDefined();
+      expect(headers["X-Title"]).toBeDefined();
+    });
+
+    it("routes performSearch through chat completions, not the legacy /search endpoint", async () => {
+      await performSearch("anything");
+
+      const { url } = callArgs();
+      expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
+      expect(url).not.toMatch(/\/search$/);
     });
   });
 });

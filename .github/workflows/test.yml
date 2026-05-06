@@ -22,6 +22,4 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        env:
-          PERPLEXITY_API_KEY: test-api-key
         run: npm test

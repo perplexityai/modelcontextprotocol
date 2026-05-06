@@ -13,7 +13,6 @@ describe("Transport Integration Tests", () => {
   beforeEach(() => {
     originalFetch = global.fetch;
     originalEnv = { ...process.env };
-    process.env.PERPLEXITY_API_KEY = "test-api-key";
   });
 
   afterEach(() => {
@@ -32,12 +31,21 @@ describe("Transport Integration Tests", () => {
       expect(typeof server.close).toBe("function");
     });
 
-    it("should fail if PERPLEXITY_API_KEY is not set", () => {
-      delete process.env.PERPLEXITY_API_KEY;
-      
-      // The server creation itself doesn't fail, but tool calls should fail
-      const server = createPerplexityServer();
-      expect(server).toBeDefined();
+    it("should throw when OPENROUTER_API_KEY is not set and a tool is invoked", async () => {
+      delete process.env.OPENROUTER_API_KEY;
+      vi.resetModules();
+
+      try {
+        const { performChatCompletion } = await import("./server.js");
+        await expect(
+          performChatCompletion(
+            [{ role: "user", content: "hi" }],
+            "perplexity/sonar-pro"
+          )
+        ).rejects.toThrow("OPENROUTER_API_KEY environment variable is required");
+      } finally {
+        vi.resetModules();
+      }
     });
   });
 
