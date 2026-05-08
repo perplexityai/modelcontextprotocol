@@ -1,7 +1,5 @@
 # Perplexity MCP Server (OpenRouter)
 
-[![npm version](https://img.shields.io/npm/v/%40perplexity-ai%2Fmcp-server?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@perplexity-ai/mcp-server)
-
 An MCP server implementation for Perplexity models via OpenRouter, providing AI assistants with real-time web search, reasoning, and research capabilities through Sonar models.
 
 ## Available Tools
