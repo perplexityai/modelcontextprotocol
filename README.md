@@ -38,7 +38,7 @@ Advanced reasoning and problem-solving using the `perplexity/sonar-reasoning-pro
 claude mcp add perplexity --env OPENROUTER_API_KEY="your_key_here" -- npx -y github:tqtensor/modelcontextprotocol
 ```
 
-### Cursor, Claude Desktop & Windsurf
+### Cursor, Claude Desktop, Kiro & Windsurf
 
 All these clients use the same `mcpServers` format:
 
@@ -46,6 +46,7 @@ All these clients use the same `mcpServers` format:
 | -------------- | ------------------------------------- |
 | Cursor         | `~/.cursor/mcp.json`                  |
 | Claude Desktop | `claude_desktop_config.json`          |
+| Kiro           | `.kiro/settings/mcp.json`             |
 | Windsurf       | `~/.codeium/windsurf/mcp_config.json` |
 
 ```json
