@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { stripThinkingTokens, getProxyUrl, proxyAwareFetch, validateMessages } from "./server.js";
+import { stripThinkingTokens, getProxyUrl, proxyAwareFetch, validateMessages, ResearchJobStore } from "./server.js";
 
 describe("Server Utility Functions", () => {
   describe("stripThinkingTokens", () => {
@@ -254,3 +254,126 @@ describe("Server Utility Functions", () => {
     });
   });
 });
+
+describe("ResearchJobStore", () => {
+  let originalFetch: typeof globalThis.fetch;
+  let originalEnv: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    originalEnv = { ...process.env };
+    // Speed up the tests — keep poll budget short so they don't drag.
+    process.env.PERPLEXITY_RESEARCH_POLL_BUDGET_MS = "20";
+    process.env.PERPLEXITY_RESEARCH_SWEEP_INTERVAL_MS = "60000"; // 1 min, irrelevant
+    process.env.PERPLEXITY_ASYNC_MAX_WAIT_MS = "5000"; // small ceiling for failure path
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    process.env = originalEnv;
+    vi.restoreAllMocks();
+  });
+
+  function mockFetchOnce(responseBody: unknown, opts: { ok?: boolean; status?: number; statusText?: string } = {}) {
+    const ok = opts.ok ?? true;
+    const status = opts.status ?? 200;
+    const statusText = opts.statusText ?? "OK";
+    const response = {
+      ok,
+      status,
+      statusText,
+      json: async () => responseBody,
+      text: async () => JSON.stringify(responseBody),
+    } as unknown as Response;
+    return vi.fn().mockResolvedValueOnce(response);
+  }
+
+  describe("start", () => {
+    it("returns jobId + status when the submit POST succeeds", async () => {
+      globalThis.fetch = mockFetchOnce({ id: "job-abc-123", status: "CREATED" });
+      process.env.PERPLEXITY_API_KEY = "test-api-key";
+      const store = new ResearchJobStore();
+      const result = await store.start(
+        [{ role: "user", content: "hello" }],
+        "sonar-deep-research",
+        false,
+        undefined,
+        undefined,
+      );
+      expect(result.jobId).toBe("job-abc-123");
+      expect(result.status).toBe("CREATED");
+      expect(store._hasJob("job-abc-123")).toBe(true);
+      expect(store._jobCount()).toBe(1);
+    });
+
+    it("defaults to CREATED status when submit response omits status", async () => {
+      globalThis.fetch = mockFetchOnce({ id: "job-no-status" });
+      process.env.PERPLEXITY_API_KEY = "test-api-key";
+      const store = new ResearchJobStore();
+      const result = await store.start([{ role: "user", content: "hi" }], "sonar-deep-research", false, undefined, undefined);
+      expect(result.status).toBe("CREATED");
+    });
+
+    it("throws when submit response has no job id", async () => {
+      globalThis.fetch = mockFetchOnce({ status: "CREATED" /* note: no id */ });
+      process.env.PERPLEXITY_API_KEY = "test-api-key";
+      const store = new ResearchJobStore();
+      await expect(
+        store.start([{ role: "user", content: "hi" }], "sonar-deep-research", false, undefined, undefined),
+      ).rejects.toThrow(/no job id/);
+      expect(store._jobCount()).toBe(0);
+    });
+  });
+
+  describe("poll", () => {
+    it("returns NOT_FOUND for an unknown jobId", async () => {
+      const store = new ResearchJobStore();
+      const payload = await store.poll("does-not-exist");
+      expect(payload.status).toBe("NOT_FOUND");
+      expect(payload.elapsedSec).toBe(0);
+      expect(payload.message).toMatch(/No job/);
+    });
+
+    it("returns IN_PROGRESS state when the background poll hasn't completed within the budget", async () => {
+      // Submit returns CREATED. First GET (the background poll loop's poll #1) returns IN_PROGRESS.
+      // The poll budget is short (20 ms) so we'll race-timeout before the background loop completes.
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true, status: 200, statusText: "OK",
+          json: async () => ({ id: "job-inprogress", status: "CREATED" }),
+          text: async () => "{}",
+        } as unknown as Response)
+        .mockResolvedValue({
+          ok: true, status: 200, statusText: "OK",
+          json: async () => ({ status: "IN_PROGRESS" }),
+          text: async () => "{}",
+        } as unknown as Response);
+      process.env.PERPLEXITY_API_KEY = "test-api-key";
+      const store = new ResearchJobStore();
+      const { jobId } = await store.start([{ role: "user", content: "x" }], "sonar-deep-research", false, undefined, undefined);
+      const payload = await store.poll(jobId);
+      expect(["CREATED", "IN_PROGRESS"]).toContain(payload.status);
+      expect(payload.response).toBeUndefined();
+    });
+  });
+
+  describe("cancel", () => {
+    it("returns NOT_FOUND for an unknown jobId", () => {
+      const store = new ResearchJobStore();
+      const payload = store.cancel("does-not-exist");
+      expect(payload.status).toBe("NOT_FOUND");
+    });
+
+    it("marks an active job as CANCELLED", async () => {
+      globalThis.fetch = mockFetchOnce({ id: "job-to-cancel", status: "CREATED" });
+      process.env.PERPLEXITY_API_KEY = "test-api-key";
+      const store = new ResearchJobStore();
+      const { jobId } = await store.start([{ role: "user", content: "x" }], "sonar-deep-research", false, undefined, undefined);
+      const payload = store.cancel(jobId);
+      expect(payload.status).toBe("CANCELLED");
+      // Job remains in store so the next poll can observe CANCELLED.
+      expect(store._hasJob(jobId)).toBe(true);
+    });
+  });
+});
+

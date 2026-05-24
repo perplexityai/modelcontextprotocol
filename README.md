@@ -21,6 +21,18 @@ General-purpose conversational AI with real-time web search using the `sonar-pro
 ### **perplexity_research**
 Deep, comprehensive research using the `sonar-deep-research` model. Ideal for thorough analysis and detailed reports.
 
+### **perplexity_research_start** / **perplexity_research_poll** / **perplexity_research_cancel**
+
+Same `sonar-deep-research` model as `perplexity_research`, exposed via a **job-id + poll** pattern. Use these tools (instead of `perplexity_research`) if your MCP client has a hardcoded `tools/call` timeout shorter than typical deep-research wall-clock (60–300+ seconds) AND does not include `_meta.progressToken` on requests — for example, Claude Desktop as of v1.8555. See [issue #110](https://github.com/perplexityai/modelcontextprotocol/issues/110) for the related notifications/progress fix which helps clients that DO request progress.
+
+Flow:
+
+1. `perplexity_research_start({ messages, ... })` → returns `{ jobId, status: "CREATED" }` in **< 1 second**.
+2. `perplexity_research_poll({ jobId })` → blocks for up to the configured poll budget (default 45 seconds, well under typical 60-second client caps) and returns the current status. Call repeatedly until `status == "COMPLETED"` (response delivered) or `"FAILED"`.
+3. `perplexity_research_cancel({ jobId })` → marks the local job as cancelled. The Perplexity async API does not currently expose a cancel endpoint, so the upstream job may still complete and consume API quota; this call only stops local polling.
+
+The two tools accept the same inputs as `perplexity_research` and back the same model — they differ only in delivery mechanism.
+
 ### **perplexity_reason**
 Advanced reasoning and problem-solving using the `sonar-reasoning-pro` model. Perfect for complex analytical tasks.
 
@@ -38,6 +50,11 @@ Advanced reasoning and problem-solving using the `sonar-reasoning-pro` model. Pe
 3. (Optional) Set timeout: `PERPLEXITY_TIMEOUT_MS=600000` (default: 5 minutes)
 4. (Optional) Set custom base URL: `PERPLEXITY_BASE_URL=https://your-custom-url.com` (default: https://api.perplexity.ai)
 5. (Optional) Set log level: `PERPLEXITY_LOG_LEVEL=DEBUG|INFO|WARN|ERROR` (default: ERROR)
+6. (Optional) Async-job pattern tuning (only affects `perplexity_research_start` / `_poll` / `_cancel`):
+   - `PERPLEXITY_ASYNC_MAX_WAIT_MS=900000` (default 15 min) — hard ceiling on a single async job's lifetime before it is force-failed
+   - `PERPLEXITY_RESEARCH_JOB_TTL_MS=1800000` (default 30 min) — how long a completed/failed job's result is retained in memory for `_poll` retrieval
+   - `PERPLEXITY_RESEARCH_POLL_BUDGET_MS=45000` (default 45 sec) — how long each `_poll` call blocks waiting for status to change. Set lower than your MCP client's `tools/call` timeout
+   - `PERPLEXITY_RESEARCH_SWEEP_INTERVAL_MS=300000` (default 5 min) — how often the in-memory job store sweeps expired entries
 
 ### Claude Code
 
