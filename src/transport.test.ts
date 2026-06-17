@@ -149,12 +149,15 @@ describe("Transport Integration Tests", () => {
       expect(data.id).toBe(1);
       expect(data.result).toBeDefined();
       expect(data.result.tools).toBeDefined();
-      expect(data.result.tools).toHaveLength(4);
+      expect(data.result.tools).toHaveLength(7);
       
-      // Verify all four tools are present
+      // Verify all seven tools are present (4 base + 3 async-job tools for sonar-deep-research)
       const toolNames = data.result.tools.map((t: { name: string }) => t.name);
       expect(toolNames).toContain("perplexity_ask");
       expect(toolNames).toContain("perplexity_research");
+      expect(toolNames).toContain("perplexity_research_start");
+      expect(toolNames).toContain("perplexity_research_poll");
+      expect(toolNames).toContain("perplexity_research_cancel");
       expect(toolNames).toContain("perplexity_reason");
       expect(toolNames).toContain("perplexity_search");
       
