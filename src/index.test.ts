@@ -74,7 +74,8 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test question" }];
       const result = await performChatCompletion(messages, "sonar-pro");
 
-      expect(result).toBe("This is a test response");
+      expect(result.text).toBe("This is a test response");
+      expect(result.citations).toEqual([]);
       expect(global.fetch).toHaveBeenCalledWith(
         "https://api.perplexity.ai/chat/completions",
         expect.objectContaining({
@@ -115,10 +116,14 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
       const result = await performChatCompletion(messages);
 
-      expect(result).toContain("Response with citations");
-      expect(result).toContain("\n\nCitations:\n");
-      expect(result).toContain("[1] https://example.com/source1");
-      expect(result).toContain("[2] https://example.com/source2");
+      expect(result.text).toContain("Response with citations");
+      expect(result.text).toContain("\n\nCitations:\n");
+      expect(result.text).toContain("[1] https://example.com/source1");
+      expect(result.text).toContain("[2] https://example.com/source2");
+      expect(result.citations).toEqual([
+        "https://example.com/source1",
+        "https://example.com/source2",
+      ]);
     });
 
     it("should handle API errors", async () => {
@@ -195,8 +200,10 @@ describe("Perplexity MCP Server", () => {
 
       const result = await performSearch("test query", 10, 1024);
 
-      expect(result).toContain("Found 1 search results");
-      expect(result).toContain("Search Result");
+      expect(result.text).toContain("Found 1 search results");
+      expect(result.text).toContain("Search Result");
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].title).toBe("Search Result");
       expect(global.fetch).toHaveBeenCalledWith(
         "https://api.perplexity.ai/search",
         expect.objectContaining({
@@ -379,8 +386,9 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
       const result = await performChatCompletion(messages);
 
-      expect(result).toBe("Response");
-      expect(result).not.toContain("Citations:");
+      expect(result.text).toBe("Response");
+      expect(result.text).not.toContain("Citations:");
+      expect(result.citations).toEqual([]);
     });
 
     it("should handle non-array citations", async () => {
@@ -448,8 +456,8 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test with émojis 🎉" }];
       const result = await performChatCompletion(messages);
 
-      expect(result).toContain("émojis 🎉");
-      expect(result).toContain("unicode ñ");
+      expect(result.text).toContain("émojis 🎉");
+      expect(result.text).toContain("unicode ñ");
     });
 
     it("should handle very long content strings", async () => {
@@ -466,8 +474,8 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "test" }];
       const result = await performChatCompletion(messages);
 
-      expect(result).toBe(longContent);
-      expect(result.length).toBe(100000);
+      expect(result.text).toBe(longContent);
+      expect(result.text.length).toBe(100000);
     });
 
     it("should handle multiple models correctly", async () => {
@@ -507,7 +515,7 @@ describe("Perplexity MCP Server", () => {
         const messages = [{ role: "user", content: "test" }];
         const result = await performChatCompletion(messages, model);
 
-        expect(result).toContain(model);
+        expect(result.text).toContain(model);
         expect(global.fetch).toHaveBeenCalledWith(
           "https://api.perplexity.ai/chat/completions",
           expect.objectContaining({
@@ -587,7 +595,7 @@ describe("Perplexity MCP Server", () => {
       expect(results).toHaveLength(3);
       expect(global.fetch).toHaveBeenCalledTimes(3);
       // Results should all be present (may not be unique due to timing)
-      expect(results.every(r => r.startsWith("Response"))).toBe(true);
+      expect(results.every(r => r.text.startsWith("Response"))).toBe(true);
     });
 
     it("should respect timeout on each call independently", async () => {
@@ -610,7 +618,7 @@ describe("Perplexity MCP Server", () => {
 
       const messages = [{ role: "user", content: "test" }];
       const result1 = await performChatCompletion(messages);
-      expect(result1).toBe("fast");
+      expect(result1.text).toBe("fast");
 
       // Second call with short timeout
       process.env.PERPLEXITY_TIMEOUT_MS = "10";
@@ -705,10 +713,10 @@ describe("Perplexity MCP Server", () => {
       const messages = [{ role: "user", content: "What is 2+2?" }];
       const resultStripped = await performChatCompletion(messages, "sonar-reasoning-pro", true);
 
-      expect(resultStripped).not.toContain("<think>");
-      expect(resultStripped).not.toContain("</think>");
-      expect(resultStripped).not.toContain("This is my reasoning process");
-      expect(resultStripped).toContain("The answer is 4.");
+      expect(resultStripped.text).not.toContain("<think>");
+      expect(resultStripped.text).not.toContain("</think>");
+      expect(resultStripped.text).not.toContain("This is my reasoning process");
+      expect(resultStripped.text).toContain("The answer is 4.");
 
       // Test with stripThinking = false
       global.fetch = vi.fn().mockResolvedValue({
@@ -718,8 +726,8 @@ describe("Perplexity MCP Server", () => {
 
       const resultKept = await performChatCompletion(messages, "sonar-reasoning-pro", false);
 
-      expect(resultKept).toContain("<think>This is my reasoning process</think>");
-      expect(resultKept).toContain("The answer is 4.");
+      expect(resultKept.text).toContain("<think>This is my reasoning process</think>");
+      expect(resultKept.text).toContain("The answer is 4.");
     });
   });
 

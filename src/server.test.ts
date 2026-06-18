@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { stripThinkingTokens, getProxyUrl, proxyAwareFetch, validateMessages } from "./server.js";
+import {
+  stripThinkingTokens,
+  getProxyUrl,
+  proxyAwareFetch,
+  validateMessages,
+  wrapUntrustedLLMOutput,
+  UNTRUSTED_LLM_NOTICE,
+} from "./server.js";
 
 describe("Server Utility Functions", () => {
   describe("stripThinkingTokens", () => {
@@ -251,6 +258,69 @@ describe("Server Utility Functions", () => {
         { role: "assistant", content: "also valid" },
         { role: "user" } // no content
       ], "test_tool")).toThrow("Invalid message at index 2: 'content' must be a string");
+    });
+  });
+
+  describe("wrapUntrustedLLMOutput (GHSA-r55g-g74v-4m2m mitigation)", () => {
+    it("should prepend the untrusted-LLM notice", () => {
+      const wrapped = wrapUntrustedLLMOutput("hello world", {
+        source: "perplexity-sonar",
+        tool: "perplexity_ask",
+      });
+      expect(wrapped.startsWith(UNTRUSTED_LLM_NOTICE)).toBe(true);
+    });
+
+    it("should wrap the body in a provenance envelope tag", () => {
+      const wrapped = wrapUntrustedLLMOutput("hello world", {
+        source: "perplexity-sonar",
+        tool: "perplexity_ask",
+      });
+      expect(wrapped).toContain(
+        '<perplexity-sonar-response untrusted="true" source="perplexity-sonar" tool="perplexity_ask">'
+      );
+      expect(wrapped).toContain("</perplexity-sonar-response>");
+      expect(wrapped).toContain("hello world");
+    });
+
+    it("should include the model attribute when provided", () => {
+      const wrapped = wrapUntrustedLLMOutput("body", {
+        source: "perplexity-sonar",
+        model: "sonar-pro",
+        tool: "perplexity_ask",
+      });
+      expect(wrapped).toContain('model="sonar-pro"');
+    });
+
+    it("should omit the model attribute when not provided", () => {
+      const wrapped = wrapUntrustedLLMOutput("body", {
+        source: "perplexity-search",
+        tool: "perplexity_search",
+      });
+      expect(wrapped).not.toContain("model=");
+    });
+
+    it("should support the perplexity-search source for the structured-search tool", () => {
+      const wrapped = wrapUntrustedLLMOutput("search results body", {
+        source: "perplexity-search",
+        tool: "perplexity_search",
+      });
+      expect(wrapped).toContain('source="perplexity-search"');
+      expect(wrapped).toContain('tool="perplexity_search"');
+    });
+
+    it("should declare content as untrusted in the NOTICE", () => {
+      expect(UNTRUSTED_LLM_NOTICE).toMatch(/untrusted/i);
+      expect(UNTRUSTED_LLM_NOTICE).toMatch(/Perplexity Sonar/i);
+      expect(UNTRUSTED_LLM_NOTICE).toMatch(/should NOT be acted on/i);
+    });
+
+    it("should preserve the original body content verbatim", () => {
+      const body = "Line 1\nLine 2 with <html> tags & special chars\nLine 3";
+      const wrapped = wrapUntrustedLLMOutput(body, {
+        source: "perplexity-sonar",
+        tool: "perplexity_reason",
+      });
+      expect(wrapped).toContain(body);
     });
   });
 });
