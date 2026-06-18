@@ -418,7 +418,7 @@ describe("Perplexity MCP Server", () => {
       );
     });
 
-    it("should handle error text parse failures", async () => {
+    it("should handle error text parse failures with a generic message", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 500,
@@ -430,8 +430,70 @@ describe("Perplexity MCP Server", () => {
 
       const messages = [{ role: "user", content: "test" }];
 
+      // Sanitized: the client should only see the status + statusText, never
+      // the underlying "Unable to parse error response" or raw exception text.
       await expect(performChatCompletion(messages)).rejects.toThrow(
-        "Unable to parse error response"
+        "Perplexity API error: 500 Internal Server Error"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "Cannot read error"
+      );
+    });
+
+    // CWE-200 regression: thrown error must not contain JSON-parser exception text.
+    it("should not expose JSON parse error details", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => {
+          throw new Error("Invalid JSON containing secret_token=abc123");
+        },
+      } as unknown as Response);
+
+      const messages = [{ role: "user", content: "test" }];
+
+      await expect(performChatCompletion(messages)).rejects.toThrow(
+        "Failed to parse JSON response from Perplexity API"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "secret_token=abc123"
+      );
+    });
+
+    // CWE-200 regression: thrown error must not contain network exception text.
+    it("should not expose network error details", async () => {
+      global.fetch = vi.fn().mockRejectedValue(
+        new Error("Network failure with credential=private-token")
+      );
+
+      const messages = [{ role: "user", content: "test" }];
+
+      await expect(performChatCompletion(messages)).rejects.toThrow(
+        "Network error while calling Perplexity API"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "credential=private-token"
+      );
+    });
+
+    // CWE-200 regression: thrown error must not contain the upstream response body.
+    it("should not expose upstream error response details", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        text: async () => "internal_trace=abc123; account=private-tier",
+      } as Response);
+
+      const messages = [{ role: "user", content: "test" }];
+
+      await expect(performChatCompletion(messages)).rejects.toThrow(
+        "Perplexity API error: 500 Internal Server Error"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "internal_trace=abc123"
+      );
+      await expect(performChatCompletion(messages)).rejects.not.toThrow(
+        "private-tier"
       );
     });
 
