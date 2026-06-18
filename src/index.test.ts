@@ -176,6 +176,125 @@ describe("Perplexity MCP Server", () => {
     });
   });
 
+  describe("HTTP 429 retry behavior", () => {
+    // Use zero-delay schedule so tests don't actually wait 2s/4s/8s.
+    const originalRetryDelays = process.env.PERPLEXITY_RETRY_DELAYS_MS;
+
+    beforeEach(() => {
+      process.env.PERPLEXITY_RETRY_DELAYS_MS = "0,0,0";
+    });
+
+    afterEach(() => {
+      if (originalRetryDelays === undefined) {
+        delete process.env.PERPLEXITY_RETRY_DELAYS_MS;
+      } else {
+        process.env.PERPLEXITY_RETRY_DELAYS_MS = originalRetryDelays;
+      }
+    });
+
+    it("should retry on 429 and succeed after rate limit clears", async () => {
+      let callCount = 0;
+      global.fetch = vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount < 3) {
+          return {
+            ok: false,
+            status: 429,
+            statusText: "Too Many Requests",
+            headers: new Headers(),
+            text: async () => "rate limited",
+          } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          headers: new Headers(),
+          json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+        } as unknown as Response;
+      });
+
+      const messages = [{ role: "user", content: "test" }];
+      const result = await performChatCompletion(messages);
+
+      expect(result).toBe("ok");
+      expect(callCount).toBe(3); // 1 initial + 2 retries
+    });
+
+    it("should give up after the configured number of 429 retries", async () => {
+      let callCount = 0;
+      global.fetch = vi.fn().mockImplementation(async () => {
+        callCount++;
+        return {
+          ok: false,
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: new Headers(),
+          text: async () => "rate limited",
+        } as unknown as Response;
+      });
+
+      const messages = [{ role: "user", content: "test" }];
+      await expect(performChatCompletion(messages)).rejects.toThrow(
+        "Perplexity API error: 429 Too Many Requests"
+      );
+      // Default schedule has 3 retries, so 4 total attempts.
+      expect(callCount).toBe(4);
+    });
+
+    it("should not retry on non-429 errors", async () => {
+      let callCount = 0;
+      global.fetch = vi.fn().mockImplementation(async () => {
+        callCount++;
+        return {
+          ok: false,
+          status: 500,
+          statusText: "Internal Server Error",
+          headers: new Headers(),
+          text: async () => "oops",
+        } as unknown as Response;
+      });
+
+      const messages = [{ role: "user", content: "test" }];
+      await expect(performChatCompletion(messages)).rejects.toThrow(
+        "Perplexity API error: 500"
+      );
+      expect(callCount).toBe(1); // no retries for 5xx
+    });
+
+    it("should respect a Retry-After header on 429", async () => {
+      // Force a small but observable delay via Retry-After.
+      let callCount = 0;
+      const callTimes: number[] = [];
+      global.fetch = vi.fn().mockImplementation(async () => {
+        callTimes.push(Date.now());
+        callCount++;
+        if (callCount < 2) {
+          return {
+            ok: false,
+            status: 429,
+            statusText: "Too Many Requests",
+            // 0 means "retry immediately" — cheap, but proves the parsing path runs.
+            headers: new Headers({ "retry-after": "0" }),
+            text: async () => "rate limited",
+          } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          headers: new Headers(),
+          json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+        } as unknown as Response;
+      });
+
+      const messages = [{ role: "user", content: "test" }];
+      const result = await performChatCompletion(messages);
+      expect(result).toBe("ok");
+      expect(callCount).toBe(2);
+    });
+  });
+
   describe("performSearch", () => {
     it("should successfully perform search", async () => {
       const mockResponse = {

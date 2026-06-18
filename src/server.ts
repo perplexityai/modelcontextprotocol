@@ -61,15 +61,33 @@ export function stripThinkingTokens(content: string): string {
   return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
-async function makeApiRequest(
+/**
+ * Default retry schedule for HTTP 429 (rate limit) responses.
+ * Overridable for tests via the PERPLEXITY_RETRY_DELAYS_MS env var
+ * (comma-separated milliseconds, e.g. "0,0,0" to disable real waits).
+ */
+function getRetryDelaysMs(): number[] {
+  const raw = process.env.PERPLEXITY_RETRY_DELAYS_MS;
+  if (raw) {
+    const parsed = raw
+      .split(",")
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isFinite(n) && n >= 0);
+    if (parsed.length > 0) return parsed;
+  }
+  return [2000, 4000, 8000];
+}
+
+async function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return;
+  await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function singleApiAttempt(
   endpoint: string,
   body: Record<string, unknown>,
   serviceOrigin: string | undefined,
 ): Promise<Response> {
-  if (!PERPLEXITY_API_KEY) {
-    throw new Error("PERPLEXITY_API_KEY environment variable is required");
-  }
-
   // Read timeout fresh each time to respect env var changes
   const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
 
@@ -102,20 +120,59 @@ async function makeApiRequest(
     throw new Error(`Network error while calling Perplexity API: ${error}`);
   }
   clearTimeout(timeoutId);
+  return response;
+}
 
-  if (!response.ok) {
+async function makeApiRequest(
+  endpoint: string,
+  body: Record<string, unknown>,
+  serviceOrigin: string | undefined,
+): Promise<Response> {
+  if (!PERPLEXITY_API_KEY) {
+    throw new Error("PERPLEXITY_API_KEY environment variable is required");
+  }
+
+  const retryDelays = getRetryDelaysMs();
+  let response: Response | undefined;
+
+  // Initial attempt + up to retryDelays.length retries, exclusively for HTTP 429.
+  // Other status codes (4xx/5xx) fail fast — retrying them is not safe without
+  // operator-controlled idempotency keys, and Perplexity does not currently
+  // signal retry-safe 5xxs distinctly.
+  for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+    response = await singleApiAttempt(endpoint, body, serviceOrigin);
+
+    if (response.status !== 429) break;
+
+    const isLastAttempt = attempt === retryDelays.length;
+    if (isLastAttempt) break;
+
+    // Respect server-provided Retry-After (seconds) when present, otherwise
+    // fall back to the configured backoff schedule.
+    const retryAfterHeader = response.headers.get("retry-after");
+    let waitMs = retryDelays[attempt];
+    if (retryAfterHeader) {
+      const retryAfterSec = parseInt(retryAfterHeader, 10);
+      if (Number.isFinite(retryAfterSec) && retryAfterSec >= 0) {
+        waitMs = Math.max(waitMs, retryAfterSec * 1000);
+      }
+    }
+    await sleep(waitMs);
+  }
+
+  if (!response!.ok) {
     let errorText;
     try {
-      errorText = await response.text();
+      errorText = await response!.text();
     } catch (parseError) {
       errorText = "Unable to parse error response";
     }
     throw new Error(
-      `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`
+      `Perplexity API error: ${response!.status} ${response!.statusText}\n${errorText}`
     );
   }
 
-  return response;
+  return response!;
 }
 
 export async function consumeSSEStream(response: Response): Promise<ChatCompletionResponse> {
