@@ -174,6 +174,44 @@ describe("Perplexity MCP Server", () => {
         "Network error while calling Perplexity API"
       );
     });
+
+    // Regression test for #101 — verifies that the official server does NOT
+    // wrap user queries in any prompt template (the bug reported in #101 was
+    // in the third-party DaInfernalCoder/researcher-mcp fork, not this repo).
+    // If anyone re-introduces template wrapping in this repo, this test will
+    // fail loudly.
+    it("should forward user messages verbatim to the API (regression: #101)", async () => {
+      const mockResponse = {
+        choices: [{ message: { content: "ok" } }],
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const userQuery =
+        "Cleveland Fed inflation nowcast March 2026 CPI estimate";
+      const messages = [{ role: "user", content: userQuery }];
+
+      await performChatCompletion(messages, "sonar-reasoning-pro");
+
+      const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+      const [, init] = fetchMock.mock.calls[0];
+      const sentBody = JSON.parse((init as RequestInit).body as string);
+
+      // The body must contain exactly the user's message — no prompt template
+      // around it, no synthetic system message added by the server.
+      expect(sentBody.messages).toEqual(messages);
+      expect(sentBody.messages[0].content).toBe(userQuery);
+
+      // Defensive guards against known template keywords that poisoned search
+      // results in the third-party fork (see issue #101).
+      const sentJson = (init as RequestInit).body as string;
+      expect(sentJson).not.toContain("error messages, logs, code snippets");
+      expect(sentJson).not.toContain("specific situation");
+      expect(sentJson).not.toContain("step-by-step reasoning based on the actual context");
+    });
   });
 
   describe("performSearch", () => {
