@@ -118,7 +118,55 @@ async function makeApiRequest(
   return response;
 }
 
-export async function consumeSSEStream(response: Response): Promise<ChatCompletionResponse> {
+export type SSEProgressStats = {
+  chunkCount: number;
+  totalChars: number;
+};
+
+export type SSEProgressCallback = (stats: SSEProgressStats) => void | Promise<void>;
+
+/** Heartbeat interval while the API is in a silent search/reasoning phase (no SSE deltas). */
+export const SSE_HEARTBEAT_MS = 10_000;
+
+type McpProgressExtra = {
+  _meta?: { progressToken?: string | number };
+  sendNotification: (notification: {
+    method: "notifications/progress";
+    params: {
+      progressToken: string | number;
+      progress: number;
+      message?: string;
+    };
+  }) => Promise<void>;
+};
+
+export function createMcpProgressReporter(
+  extra: McpProgressExtra,
+  label = "Streaming response",
+): SSEProgressCallback | undefined {
+  const progressToken = extra._meta?.progressToken;
+  if (progressToken === undefined) {
+    return undefined;
+  }
+
+  let progress = 0;
+  return async ({ chunkCount, totalChars }) => {
+    progress += 1;
+    await extra.sendNotification({
+      method: "notifications/progress",
+      params: {
+        progressToken,
+        progress,
+        message: `${label}… ${chunkCount} chunks, ${totalChars} chars streamed`,
+      },
+    });
+  };
+}
+
+export async function consumeSSEStream(
+  response: Response,
+  onProgress?: SSEProgressCallback,
+): Promise<ChatCompletionResponse> {
   const body = response.body;
   if (!body) {
     throw new Error("Response body is null");
@@ -134,40 +182,64 @@ export async function consumeSSEStream(response: Response): Promise<ChatCompleti
   let model: string | undefined;
   let created: number | undefined;
   let buffer = "";
+  let chunkCount = 0;
+  let totalChars = 0;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  const emitProgress = async () => {
+    if (!onProgress) {
+      return;
+    }
+    await onProgress({ chunkCount, totalChars });
+  };
 
-    buffer += decoder.decode(value, { stream: true });
+  const heartbeatTimer = onProgress
+    ? setInterval(() => {
+        void emitProgress();
+      }, SSE_HEARTBEAT_MS)
+    : undefined;
 
-    const lines = buffer.split("\n");
-    // Keep the last potentially incomplete line in the buffer
-    buffer = lines.pop() || "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith("data:")) continue;
+      buffer += decoder.decode(value, { stream: true });
 
-      const data = trimmed.slice("data:".length).trim();
-      if (data === "[DONE]") continue;
+      const lines = buffer.split("\n");
+      // Keep the last potentially incomplete line in the buffer
+      buffer = lines.pop() || "";
 
-      try {
-        const parsed = JSON.parse(data);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) continue;
 
-        if (parsed.id) id = parsed.id;
-        if (parsed.model) model = parsed.model;
-        if (parsed.created) created = parsed.created;
-        if (parsed.citations) citations = parsed.citations;
-        if (parsed.usage) usage = parsed.usage;
+        const data = trimmed.slice("data:".length).trim();
+        if (data === "[DONE]") continue;
 
-        const delta = parsed.choices?.[0]?.delta;
-        if (delta?.content) {
-          contentParts.push(delta.content);
+        try {
+          const parsed = JSON.parse(data);
+
+          if (parsed.id) id = parsed.id;
+          if (parsed.model) model = parsed.model;
+          if (parsed.created) created = parsed.created;
+          if (parsed.citations) citations = parsed.citations;
+          if (parsed.usage) usage = parsed.usage;
+
+          const delta = parsed.choices?.[0]?.delta;
+          if (delta?.content) {
+            contentParts.push(delta.content);
+            chunkCount += 1;
+            totalChars += delta.content.length;
+            await emitProgress();
+          }
+        } catch {
+          // Skip malformed JSON chunks (e.g. keep-alive pings)
         }
-      } catch {
-        // Skip malformed JSON chunks (e.g. keep-alive pings)
       }
+    }
+  } finally {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
     }
   }
 
@@ -194,7 +266,8 @@ export async function performChatCompletion(
   model: string = "sonar-pro",
   stripThinking: boolean = false,
   serviceOrigin?: string,
-  options?: ChatCompletionOptions
+  options?: ChatCompletionOptions,
+  onProgress?: SSEProgressCallback,
 ): Promise<string> {
   const useStreaming = model === "sonar-deep-research";
 
@@ -213,7 +286,7 @@ export async function performChatCompletion(
   let data: ChatCompletionResponse;
   try {
     if (useStreaming) {
-      data = await consumeSSEStream(response);
+      data = await consumeSSEStream(response, onProgress);
     } else {
       const json = await response.json();
       data = ChatCompletionResponseSchema.parse(json);
@@ -420,7 +493,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
         destructiveHint: false,
       },
     },
-    async (args: any) => {
+    async (args: any, extra: McpProgressExtra) => {
       const { messages, strip_thinking, reasoning_effort } = args as { 
         messages: Message[];
         strip_thinking?: boolean;
@@ -431,7 +504,15 @@ export function createPerplexityServer(serviceOrigin?: string) {
       const options = {
         ...(reasoning_effort && { reasoning_effort }),
       };
-      const result = await performChatCompletion(messages, "sonar-deep-research", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const onProgress = createMcpProgressReporter(extra, "Deep research");
+      const result = await performChatCompletion(
+        messages,
+        "sonar-deep-research",
+        stripThinking,
+        serviceOrigin,
+        Object.keys(options).length > 0 ? options : undefined,
+        onProgress,
+      );
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -473,7 +554,15 @@ export function createPerplexityServer(serviceOrigin?: string) {
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
       };
-      const result = await performChatCompletion(messages, "sonar-reasoning-pro", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const onProgress = createMcpProgressReporter(extra, "Reasoning");
+      const result = await performChatCompletion(
+        messages,
+        "sonar-reasoning-pro",
+        stripThinking,
+        serviceOrigin,
+        Object.keys(options).length > 0 ? options : undefined,
+        onProgress,
+      );
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },

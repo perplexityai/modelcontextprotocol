@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { stripThinkingTokens, getProxyUrl, proxyAwareFetch, validateMessages } from "./server.js";
+import {
+  stripThinkingTokens,
+  getProxyUrl,
+  proxyAwareFetch,
+  validateMessages,
+  consumeSSEStream,
+  createMcpProgressReporter,
+  SSE_HEARTBEAT_MS,
+} from "./server.js";
 
 describe("Server Utility Functions", () => {
   describe("stripThinkingTokens", () => {
@@ -251,6 +259,128 @@ describe("Server Utility Functions", () => {
         { role: "assistant", content: "also valid" },
         { role: "user" } // no content
       ], "test_tool")).toThrow("Invalid message at index 2: 'content' must be a string");
+    });
+  });
+
+  describe("consumeSSEStream", () => {
+    function sseResponse(chunks: string[]): Response {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) {
+            controller.enqueue(encoder.encode(chunk));
+          }
+          controller.close();
+        },
+      });
+      return new Response(stream, { status: 200 });
+    }
+
+    it("should assemble streamed content deltas", async () => {
+      const response = sseResponse([
+        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
+        "data: [DONE]\n\n",
+      ]);
+
+      const result = await consumeSSEStream(response);
+      expect(result.choices[0].message.content).toBe("Hello world");
+    });
+
+    it("should invoke onProgress for each content delta", async () => {
+      const response = sseResponse([
+        'data: {"choices":[{"delta":{"content":"a"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"b"}}]}\n\n',
+      ]);
+      const progressCalls: Array<{ chunkCount: number; totalChars: number }> = [];
+
+      await consumeSSEStream(response, async (stats) => {
+        progressCalls.push(stats);
+      });
+
+      expect(progressCalls).toEqual([
+        { chunkCount: 1, totalChars: 1 },
+        { chunkCount: 2, totalChars: 2 },
+      ]);
+    });
+
+    it("should emit heartbeat progress during silent SSE gaps", async () => {
+      vi.useFakeTimers();
+      try {
+        const encoder = new TextEncoder();
+        let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controllerRef = controller;
+          },
+        });
+        const response = new Response(stream, { status: 200 });
+        const progressCalls: number[] = [];
+
+        const pending = consumeSSEStream(response, async () => {
+          progressCalls.push(Date.now());
+        });
+
+        await vi.advanceTimersByTimeAsync(SSE_HEARTBEAT_MS);
+        expect(progressCalls.length).toBeGreaterThanOrEqual(1);
+
+        controllerRef?.enqueue(
+          encoder.encode('data: {"choices":[{"delta":{"content":"done"}}]}\n\n'),
+        );
+        controllerRef?.close();
+        await pending;
+
+        expect(progressCalls.length).toBeGreaterThanOrEqual(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("createMcpProgressReporter", () => {
+    it("should return undefined when progressToken is missing", () => {
+      const reporter = createMcpProgressReporter({
+        sendNotification: vi.fn().mockResolvedValue(undefined),
+      });
+      expect(reporter).toBeUndefined();
+    });
+
+    it("should emit notifications/progress with incrementing counter", async () => {
+      const sendNotification = vi.fn().mockResolvedValue(undefined);
+      const reporter = createMcpProgressReporter({
+        _meta: { progressToken: "token-1" },
+        sendNotification,
+      });
+      expect(reporter).toBeDefined();
+
+      await reporter!({ chunkCount: 2, totalChars: 40 });
+      await reporter!({ chunkCount: 5, totalChars: 120 });
+
+      expect(sendNotification).toHaveBeenCalledTimes(2);
+      expect(sendNotification.mock.calls[0][0]).toEqual({
+        method: "notifications/progress",
+        params: {
+          progressToken: "token-1",
+          progress: 1,
+          message: "Streaming response… 2 chunks, 40 chars streamed",
+        },
+      });
+      expect(sendNotification.mock.calls[1][0].params.progress).toBe(2);
+    });
+
+    it("should use a custom progress label", async () => {
+      const sendNotification = vi.fn().mockResolvedValue(undefined);
+      const reporter = createMcpProgressReporter(
+        {
+          _meta: { progressToken: "token-2" },
+          sendNotification,
+        },
+        "Reasoning",
+      );
+
+      await reporter!({ chunkCount: 1, totalChars: 10 });
+
+      expect(sendNotification.mock.calls[0][0].params.message).toContain("Reasoning");
     });
   });
 });
