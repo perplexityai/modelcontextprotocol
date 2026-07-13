@@ -140,7 +140,10 @@ type McpProgressExtra = {
   }) => Promise<void>;
 };
 
-export function createMcpProgressReporter(extra: McpProgressExtra): SSEProgressCallback | undefined {
+export function createMcpProgressReporter(
+  extra: McpProgressExtra,
+  label = "Streaming response",
+): SSEProgressCallback | undefined {
   const progressToken = extra._meta?.progressToken;
   if (progressToken === undefined) {
     return undefined;
@@ -154,7 +157,7 @@ export function createMcpProgressReporter(extra: McpProgressExtra): SSEProgressC
       params: {
         progressToken,
         progress,
-        message: `Deep research running… ${chunkCount} chunks, ${totalChars} chars streamed`,
+        message: `${label}… ${chunkCount} chunks, ${totalChars} chars streamed`,
       },
     });
   };
@@ -501,7 +504,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
       const options = {
         ...(reasoning_effort && { reasoning_effort }),
       };
-      const onProgress = createMcpProgressReporter(extra);
+      const onProgress = createMcpProgressReporter(extra, "Deep research");
       const result = await performChatCompletion(
         messages,
         "sonar-deep-research",
@@ -551,7 +554,15 @@ export function createPerplexityServer(serviceOrigin?: string) {
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
       };
-      const result = await performChatCompletion(messages, "sonar-reasoning-pro", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const onProgress = createMcpProgressReporter(extra, "Reasoning");
+      const result = await performChatCompletion(
+        messages,
+        "sonar-reasoning-pro",
+        stripThinking,
+        serviceOrigin,
+        Object.keys(options).length > 0 ? options : undefined,
+        onProgress,
+      );
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },

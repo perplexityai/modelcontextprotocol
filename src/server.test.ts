@@ -362,10 +362,25 @@ describe("Server Utility Functions", () => {
         params: {
           progressToken: "token-1",
           progress: 1,
-          message: "Deep research running… 2 chunks, 40 chars streamed",
+          message: "Streaming response… 2 chunks, 40 chars streamed",
         },
       });
       expect(sendNotification.mock.calls[1][0].params.progress).toBe(2);
+    });
+
+    it("should use a custom progress label", async () => {
+      const sendNotification = vi.fn().mockResolvedValue(undefined);
+      const reporter = createMcpProgressReporter(
+        {
+          _meta: { progressToken: "token-2" },
+          sendNotification,
+        },
+        "Reasoning",
+      );
+
+      await reporter!({ chunkCount: 1, totalChars: 10 });
+
+      expect(sendNotification.mock.calls[0][0].params.message).toContain("Reasoning");
     });
   });
 });
