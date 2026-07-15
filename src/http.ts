@@ -124,10 +124,16 @@ export function createHttpApp(options: HttpAppOptions): Express {
 
   app.use(express.json());
 
-  const mcpServer = createPerplexityServer();
-
   app.all("/mcp", async (req, res) => {
     try {
+      // Create a fresh server + transport per request. The stateless
+      // StreamableHTTP transport (sessionIdGenerator: undefined) keeps no
+      // session to reuse, and an McpServer can only be connected to one
+      // transport at a time. Sharing a single server across requests makes any
+      // request that arrives while another is still open throw "Already
+      // connected to a transport" and return 500 — which breaks every
+      // multi-request MCP client. This mirrors the SDK's stateless example.
+      const mcpServer = createPerplexityServer();
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
@@ -135,6 +141,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
 
       res.on("close", () => {
         transport.close();
+        mcpServer.close();
       });
 
       await mcpServer.connect(transport);

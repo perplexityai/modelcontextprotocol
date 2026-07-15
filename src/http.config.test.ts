@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Server } from "http";
 import { createHttpApp, buildAllowedHosts } from "./http.js";
+import * as serverModule from "./server.js";
 
 /**
  * Tests for the HTTP transport's CORS, bind, and Host header configuration.
@@ -348,6 +349,55 @@ describe("HTTP transport configuration", () => {
       });
 
       expect(status).toBe(200);
+    });
+  });
+
+  describe("stateless server lifecycle", () => {
+    // Regression: createHttpApp built a single McpServer at module scope and
+    // called mcpServer.connect(transport) on every request. The stateless
+    // StreamableHTTP transport (sessionIdGenerator: undefined) has no session
+    // to reuse, so while one request's transport is still open a concurrent
+    // request calling connect() on the same server threw "Already connected to
+    // a transport" -> HTTP 500. Real MCP clients overlap requests (an open
+    // stream plus follow-up calls), so this fired in practice. The fix is a
+    // fresh server + transport per request.
+    it("creates a fresh server per request, not one shared server", async () => {
+      const spy = vi.spyOn(serverModule, "createPerplexityServer");
+      await start();
+      // Ignore anything created while building the app; count per-request only.
+      spy.mockClear();
+
+      const rpc = (id: number) =>
+        fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id,
+            method: "initialize",
+            params: {
+              protocolVersion: "2025-06-18",
+              capabilities: {},
+              clientInfo: { name: "regression", version: "0" },
+            },
+          }),
+        });
+
+      const first = await rpc(1);
+      const second = await rpc(2);
+
+      // Both requests must succeed. A shared module-scope server made the
+      // second request throw "Already connected to a transport" -> 500.
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+
+      // And the fix's invariant: one server is created per request (a shared
+      // server would be created at app-construction time and reused, i.e. zero
+      // per-request creations after mockClear).
+      expect(spy).toHaveBeenCalledTimes(2);
     });
   });
 });
