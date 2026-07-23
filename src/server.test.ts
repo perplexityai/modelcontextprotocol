@@ -1,59 +1,207 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { stripThinkingTokens, getProxyUrl, proxyAwareFetch, validateMessages } from "./server.js";
+import {
+  extractAgentText,
+  formatAgentResponseText,
+  getProxyUrl,
+  proxyAwareFetch,
+  validateMessages,
+} from "./server.js";
+import type { AgentResponse } from "./types.js";
+
+function agentResponse(output: AgentResponse["output"]): AgentResponse {
+  return { id: "resp_test", status: "completed", output };
+}
+
+function messageItem(text: string): AgentResponse["output"][number] {
+  return {
+    type: "message",
+    role: "assistant",
+    content: [{ type: "output_text", text }],
+  };
+}
 
 describe("Server Utility Functions", () => {
-  describe("stripThinkingTokens", () => {
-    it("should remove thinking tokens from content", () => {
-      const content = "Hello <think>This is internal thinking</think> world!";
-      const result = stripThinkingTokens(content);
-      expect(result).toBe("Hello  world!");
+  describe("extractAgentText", () => {
+    it("should join output_text parts across message items", () => {
+      const response = agentResponse([
+        { type: "search_results", results: [] },
+        messageItem("Part one. "),
+        messageItem("Part two."),
+      ]);
+      expect(extractAgentText(response)).toBe("Part one. Part two.");
     });
 
-    it("should handle multiple thinking tokens", () => {
-      const content = "<think>First thought</think> Hello <think>Second thought</think> world!";
-      const result = stripThinkingTokens(content);
-      expect(result).toBe("Hello  world!");
+    it("should ignore non-text content parts and tool output items", () => {
+      const response = agentResponse([
+        { type: "fetch_url_results" },
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            { type: "output_text", text: "Answer" },
+            { type: "reasoning_text", text: "hidden" } as any,
+          ],
+        },
+      ]);
+      expect(extractAgentText(response)).toBe("Answer");
     });
 
-    it("should handle multiline thinking tokens", () => {
-      const content = "Start <think>\nMultiple\nLines\nOf\nThinking\n</think> End";
-      const result = stripThinkingTokens(content);
-      expect(result).toBe("Start  End");
+    it("should return empty string when there is no message item", () => {
+      expect(extractAgentText(agentResponse([]))).toBe("");
+    });
+  });
+
+  describe("formatAgentResponseText", () => {
+    it("should append citation lines keyed by result id without touching the text", () => {
+      const response = agentResponse([
+        {
+          type: "search_results",
+          results: [
+            { id: 1, url: "https://example.com/a" },
+            { id: 2, url: "https://example.com/b" },
+            { id: 3, url: "https://example.com/c" },
+          ],
+        },
+        messageItem("Claim one[2]. Claim two[3][2]."),
+      ]);
+
+      const formatted = formatAgentResponseText(response);
+
+      expect(formatted).toContain("Claim one[2]. Claim two[3][2].");
+      expect(formatted).toContain(
+        "Citations:\n[1] https://example.com/a\n[2] https://example.com/b\n[3] https://example.com/c\n"
+      );
     });
 
-    it("should handle content without thinking tokens", () => {
-      const content = "No thinking tokens here!";
-      const result = stripThinkingTokens(content);
-      expect(result).toBe("No thinking tokens here!");
+    it("should never rewrite bracketed numbers in code, LaTeX, or list references", () => {
+      const text =
+        "Use `sys.argv[1]` to read the arg[3]. In LaTeX, $x[2]$ is common.\n" +
+        "```python\nprint(items[2])\n```\nSee step [1] of the list.";
+      const response = agentResponse([
+        {
+          type: "search_results",
+          results: [
+            { id: 1, url: "https://example.com/a" },
+            { id: 2, url: "https://example.com/b" },
+            { id: 3, url: "https://example.com/c" },
+          ],
+        },
+        messageItem(text),
+      ]);
+
+      const formatted = formatAgentResponseText(response);
+
+      expect(formatted.startsWith(text)).toBe(true);
     });
 
-    it("should handle empty content", () => {
-      const result = stripThinkingTokens("");
-      expect(result).toBe("");
+    it("should leave web-prefixed markers untouched and key the block by id", () => {
+      const response = agentResponse([
+        {
+          type: "search_results",
+          results: [{ id: 4, url: "https://example.com/only" }],
+        },
+        messageItem("A fact[web:4]. Slice syntax arr[web:4] must survive."),
+      ]);
+
+      const formatted = formatAgentResponseText(response);
+
+      expect(formatted).toContain("A fact[web:4]. Slice syntax arr[web:4] must survive.");
+      expect(formatted).toContain("[4] https://example.com/only");
     });
 
-    it("should handle nested angle brackets within thinking tokens", () => {
-      const content = "Test <think><nested>content</nested></think> result";
-      const result = stripThinkingTokens(content);
-      expect(result).toBe("Test  result");
+    it("should emit one citation line when the same id and url repeat across batches", () => {
+      const response = agentResponse([
+        {
+          type: "search_results",
+          results: [
+            { id: 1, url: "https://example.com/a" },
+            { id: 2, url: "https://example.com/b" },
+          ],
+        },
+        {
+          type: "search_results",
+          results: [{ id: 1, url: "https://example.com/a" }],
+        },
+        messageItem("Claim[1]."),
+      ]);
+
+      const formatted = formatAgentResponseText(response);
+
+      expect(formatted.match(/\[1\] https:\/\/example\.com\/a/g)).toHaveLength(1);
+      expect(formatted).toContain("[2] https://example.com/b");
     });
 
-    it("should trim the result", () => {
-      const content = "   <think>Remove me</think>   ";
-      const result = stripThinkingTokens(content);
-      expect(result).toBe("");
+    it("should keep ids stable across multiple search batches", () => {
+      const response = agentResponse([
+        {
+          type: "search_results",
+          results: [
+            { id: 1, url: "https://example.com/a" },
+            { id: 2, url: "https://example.com/b" },
+          ],
+        },
+        {
+          type: "search_results",
+          results: [{ id: 3, url: "https://example.com/c" }],
+        },
+        messageItem("Later claim[3]."),
+      ]);
+
+      const formatted = formatAgentResponseText(response);
+
+      expect(formatted).toContain("Later claim[3].");
+      expect(formatted).toContain(
+        "Citations:\n[1] https://example.com/a\n[2] https://example.com/b\n[3] https://example.com/c\n"
+      );
     });
 
-    it("should pass through unclosed think tag unchanged", () => {
-      const content = "Start <think>unclosed content";
-      const result = stripThinkingTokens(content);
-      expect(result).toBe("Start <think>unclosed content");
+    it("should fall back to positional numbering when ids are ambiguous", () => {
+      const response = agentResponse([
+        {
+          type: "search_results",
+          results: [{ id: 1, url: "https://example.com/first-batch" }],
+        },
+        {
+          type: "search_results",
+          results: [{ id: 1, url: "https://example.com/second-batch" }],
+        },
+        messageItem("Ambiguous ref[1]."),
+      ]);
+
+      const formatted = formatAgentResponseText(response);
+
+      expect(formatted).toContain("Ambiguous ref[1].");
+      expect(formatted).toContain("[1] https://example.com/first-batch");
+      expect(formatted).toContain("[2] https://example.com/second-batch");
     });
 
-    it("should pass through orphan closing tag unchanged", () => {
-      const content = "Some </think> content here";
-      const result = stripThinkingTokens(content);
-      expect(result).toBe("Some </think> content here");
+    it("should fall back to positional numbering when ids are missing", () => {
+      const response = agentResponse([
+        {
+          type: "search_results",
+          results: [
+            { url: "https://example.com/dup" },
+            { url: "https://example.com/dup" },
+            { url: "https://example.com/other" },
+          ],
+        },
+        messageItem("Answer without refs."),
+      ]);
+
+      const formatted = formatAgentResponseText(response);
+
+      expect(formatted).toContain("[1] https://example.com/dup");
+      expect(formatted).toContain("[2] https://example.com/other");
+      expect(formatted).not.toContain("[3]");
+    });
+
+    it("should return plain text when there are no search results", () => {
+      const formatted = formatAgentResponseText(
+        agentResponse([messageItem("Just an answer.")])
+      );
+
+      expect(formatted).toBe("Just an answer.");
+      expect(formatted).not.toContain("Citations:");
     });
   });
 
@@ -193,64 +341,28 @@ describe("Server Utility Functions", () => {
   });
 
   describe("validateMessages", () => {
-    it("should throw if messages is not an array", () => {
-      expect(() => validateMessages("not-an-array", "test_tool"))
-        .toThrow("Invalid arguments for test_tool: 'messages' must be an array");
+    it.each([
+      ["not-an-array", "Invalid arguments for test_tool: 'messages' must be an array"],
+      [null, "'messages' must be an array"],
+      [["string"], "Invalid message at index 0: must be an object"],
+      [[null], "Invalid message at index 0: must be an object"],
+      [[{ content: "test" }], "Invalid message at index 0: 'role' must be a string"],
+      [[{ role: 123, content: "test" }], "Invalid message at index 0: 'role' must be a string"],
+      [[{ role: "user" }], "Invalid message at index 0: 'content' must be a string"],
+      [[{ role: "user", content: 123 }], "Invalid message at index 0: 'content' must be a string"],
+      [[{ role: "user", content: null }], "Invalid message at index 0: 'content' must be a string"],
+    ])("should reject %j", (input, error) => {
+      expect(() => validateMessages(input, "test_tool")).toThrow(error);
     });
 
-    it("should throw if messages is null", () => {
-      expect(() => validateMessages(null, "test_tool"))
-        .toThrow("'messages' must be an array");
-    });
-
-    it("should throw if message is not an object", () => {
-      expect(() => validateMessages(["string"], "test_tool"))
-        .toThrow("Invalid message at index 0: must be an object");
-    });
-
-    it("should throw if message is null", () => {
-      expect(() => validateMessages([null], "test_tool"))
-        .toThrow("Invalid message at index 0: must be an object");
-    });
-
-    it("should throw if role is missing", () => {
-      expect(() => validateMessages([{ content: "test" }], "test_tool"))
-        .toThrow("Invalid message at index 0: 'role' must be a string");
-    });
-
-    it("should throw if role is not a string", () => {
-      expect(() => validateMessages([{ role: 123, content: "test" }], "test_tool"))
-        .toThrow("Invalid message at index 0: 'role' must be a string");
-    });
-
-    it("should throw if content is missing", () => {
-      expect(() => validateMessages([{ role: "user" }], "test_tool"))
-        .toThrow("Invalid message at index 0: 'content' must be a string");
-    });
-
-    it("should throw if content is not a string", () => {
-      expect(() => validateMessages([{ role: "user", content: 123 }], "test_tool"))
-        .toThrow("Invalid message at index 0: 'content' must be a string");
-    });
-
-    it("should throw if content is null", () => {
-      expect(() => validateMessages([{ role: "user", content: null }], "test_tool"))
-        .toThrow("Invalid message at index 0: 'content' must be a string");
-    });
-
-    it("should pass for valid messages", () => {
-      expect(() => validateMessages([
+    it("should pass valid messages and report the index of an invalid one", () => {
+      const valid = [
         { role: "user", content: "Hello" },
-        { role: "assistant", content: "Hi there" }
-      ], "test_tool")).not.toThrow();
-    });
-
-    it("should report correct index for invalid message", () => {
-      expect(() => validateMessages([
-        { role: "user", content: "valid" },
-        { role: "assistant", content: "also valid" },
-        { role: "user" } // no content
-      ], "test_tool")).toThrow("Invalid message at index 2: 'content' must be a string");
+        { role: "assistant", content: "Hi there" },
+      ];
+      expect(() => validateMessages(valid, "test_tool")).not.toThrow();
+      expect(() => validateMessages([...valid, { role: "user" }], "test_tool"))
+        .toThrow("Invalid message at index 2: 'content' must be a string");
     });
   });
 });

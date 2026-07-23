@@ -5,30 +5,60 @@ export interface Message {
   content: string;
 }
 
-export interface ChatMessage {
+export interface AgentInputMessage {
+  type: "message";
+  role: string;
   content: string;
-  role?: string;
 }
 
-export interface ChatChoice {
-  message: ChatMessage;
-  finish_reason?: string;
-  index?: number;
+export interface AgentAnnotation {
+  type?: string | null;
+  url?: string | null;
+  title?: string | null;
 }
 
-export interface TokenUsage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
+export interface AgentContentPart {
+  type: string;
+  text?: string | null;
+  annotations?: AgentAnnotation[] | null;
+}
+
+export interface AgentSearchResult {
+  id?: number | null;
+  url?: string | null;
+  title?: string | null;
+  snippet?: string | null;
+  date?: string | null;
+}
+
+export interface AgentOutputItem {
+  type: string;
+  // "message" items
+  role?: string | null;
+  content?: AgentContentPart[] | null;
+  // "search_results" items
+  results?: AgentSearchResult[] | null;
+}
+
+export interface AgentCost {
+  total_cost?: number;
+  currency?: string;
+}
+
+export interface AgentUsage {
+  input_tokens?: number;
+  output_tokens?: number;
   total_tokens?: number;
+  cost?: AgentCost;
 }
 
-export interface ChatCompletionResponse {
-  choices: ChatChoice[];
-  citations?: string[];
-  usage?: TokenUsage;
-  id?: string;
-  model?: string;
-  created?: number;
+export interface AgentResponse {
+  id?: string | null;
+  status?: string | null;
+  model?: string | null;
+  output: AgentOutputItem[];
+  usage?: AgentUsage;
+  error?: { message?: string | null; type?: string | null } | null;
 }
 
 export interface SearchResult {
@@ -56,11 +86,21 @@ export interface SearchRequestBody {
   country?: string;
 }
 
-export interface ChatCompletionOptions {
+export interface AgentToolOptions {
   search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
   search_domain_filter?: string[];
   search_context_size?: "low" | "medium" | "high";
-  reasoning_effort?: "minimal" | "low" | "medium" | "high";
+}
+
+export interface AgentProgressUpdate {
+  message: string;
+}
+
+export interface AgentCallHooks {
+  /** Abort signal from the MCP request; triggers server-side cancellation. */
+  signal?: AbortSignal;
+  /** Called with human-readable progress while the agent run is in flight. */
+  onProgress?: (update: AgentProgressUpdate) => void;
 }
 
 export interface UndiciRequestOptions {

@@ -1,30 +1,55 @@
 import { z } from "zod";
 
-export const ChatMessageSchema = z.object({
-  content: z.string(),
-  role: z.string().optional(),
-});
+// Agent API response schemas, deliberately lenient so new upstream output
+// item types or fields never break the server.
+export const AgentAnnotationSchema = z
+  .object({
+    type: z.string().nullish(),
+    url: z.string().nullish(),
+    title: z.string().nullish(),
+  })
+  .passthrough();
 
-export const ChatChoiceSchema = z.object({
-  message: ChatMessageSchema,
-  finish_reason: z.string().optional(),
-  index: z.number().optional(),
-});
+export const AgentContentPartSchema = z
+  .object({
+    type: z.string(),
+    text: z.string().nullish(),
+    annotations: z.array(AgentAnnotationSchema).nullish(),
+  })
+  .passthrough();
 
-export const TokenUsageSchema = z.object({
-  prompt_tokens: z.number().optional(),
-  completion_tokens: z.number().optional(),
-  total_tokens: z.number().optional(),
-});
+export const AgentSearchResultSchema = z
+  .object({
+    id: z.number().nullish(),
+    url: z.string().nullish(),
+    title: z.string().nullish(),
+    snippet: z.string().nullish(),
+    date: z.string().nullish(),
+  })
+  .passthrough();
 
-export const ChatCompletionResponseSchema = z.object({
-  choices: z.array(ChatChoiceSchema).min(1),
-  citations: z.array(z.string()).optional(),
-  usage: TokenUsageSchema.optional(),
-  id: z.string().optional(),
-  model: z.string().optional(),
-  created: z.number().optional(),
-});
+export const AgentOutputItemSchema = z
+  .object({
+    type: z.string(),
+    role: z.string().nullish(),
+    content: z.array(AgentContentPartSchema).nullish(),
+    results: z.array(AgentSearchResultSchema).nullish(),
+  })
+  .passthrough();
+
+export const AgentResponseSchema = z
+  .object({
+    id: z.string().nullish(),
+    status: z.string().nullish(),
+    model: z.string().nullish(),
+    output: z.array(AgentOutputItemSchema),
+    usage: z.unknown().optional(),
+    error: z
+      .object({ message: z.string().nullish(), type: z.string().nullish() })
+      .passthrough()
+      .nullish(),
+  })
+  .passthrough();
 
 export const SearchResultSchema = z.object({
   title: z.string(),
