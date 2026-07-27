@@ -96,6 +96,23 @@ export interface AgentProgressUpdate {
   message: string;
 }
 
+/**
+ * Resolves the API key for an upstream Perplexity API call. Invoked once per
+ * request, so a closure over per-request state (e.g. an inbound Authorization
+ * header) gives each embedded server instance its own key.
+ */
+export type ApiKeyProvider = () => string | undefined;
+
+export interface PerplexityServerOptions {
+  /**
+   * Per-call API key resolution for embedders hosting the server for more
+   * than one key (multi-tenant). When set, the PERPLEXITY_API_KEY environment
+   * variable is never consulted: a provider that returns no key fails the
+   * call rather than silently falling back to the process-wide key.
+   */
+  apiKey?: ApiKeyProvider;
+}
+
 export interface AgentCallHooks {
   /** Abort signal from the MCP request; triggers server-side cancellation. */
   signal?: AbortSignal;

@@ -7,14 +7,18 @@ import type {
   AgentSearchResult,
   AgentToolOptions,
   AgentCallHooks,
+  ApiKeyProvider,
+  PerplexityServerOptions,
   SearchResponse,
   UndiciRequestOptions
 } from "./types.js";
 import { AgentResponseSchema, SearchResponseSchema } from "./validation.js";
 
+export type { ApiKeyProvider, PerplexityServerOptions } from "./types.js";
+
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 
 // Agent API presets backing each tool: https://docs.perplexity.ai/docs/agent-api/presets
 export const ASK_PRESET = "fast";
@@ -68,9 +72,21 @@ async function makeApiRequest(
   body: Record<string, unknown>,
   serviceOrigin: string | undefined,
   signal?: AbortSignal,
+  apiKey?: ApiKeyProvider,
 ): Promise<Response> {
-  if (!PERPLEXITY_API_KEY) {
-    throw new Error("PERPLEXITY_API_KEY environment variable is required");
+  // A configured provider fully replaces the env var: falling back would let
+  // a multi-tenant misconfiguration silently bill the process-wide key.
+  let resolvedApiKey: string | undefined;
+  if (apiKey) {
+    resolvedApiKey = apiKey();
+    if (!resolvedApiKey) {
+      throw new Error("API key provider returned no key");
+    }
+  } else {
+    resolvedApiKey = PERPLEXITY_API_KEY;
+    if (!resolvedApiKey) {
+      throw new Error("PERPLEXITY_API_KEY environment variable is required");
+    }
   }
 
   // Read timeout fresh each time to respect env var changes
@@ -92,7 +108,7 @@ async function makeApiRequest(
   try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${PERPLEXITY_API_KEY}`,
+      "Authorization": `Bearer ${resolvedApiKey}`,
       "User-Agent": `perplexity-mcp/${VERSION}`,
       "X-Source": "pplx-mcp-server",
     };
@@ -134,9 +150,9 @@ async function makeApiRequest(
 }
 
 /** Best-effort cancellation of an agent run so an abandoned request stops billing. */
-export async function cancelAgentResponse(responseId: string, serviceOrigin?: string): Promise<void> {
+export async function cancelAgentResponse(responseId: string, serviceOrigin?: string, apiKey?: ApiKeyProvider): Promise<void> {
   try {
-    await makeApiRequest(`v1/agent/${encodeURIComponent(responseId)}/cancel`, {}, serviceOrigin);
+    await makeApiRequest(`v1/agent/${encodeURIComponent(responseId)}/cancel`, {}, serviceOrigin, undefined, apiKey);
   } catch {
     // The run may already be terminal; nothing actionable either way.
   }
@@ -151,6 +167,7 @@ export async function consumeAgentStream(
   hooks?: AgentCallHooks,
   serviceOrigin?: string,
   deadlineSignal?: AbortSignal,
+  apiKey?: ApiKeyProvider,
 ): Promise<AgentResponse> {
   const body = response.body;
   if (!body) {
@@ -265,7 +282,7 @@ export async function consumeAgentStream(
     if (hooks?.signal?.aborted || deadlineSignal?.aborted) {
       if (responseId) {
         // Stop the server-side run so an abandoned request stops billing.
-        void cancelAgentResponse(responseId, serviceOrigin);
+        void cancelAgentResponse(responseId, serviceOrigin, apiKey);
       }
       if (hooks?.signal?.aborted) {
         throw new Error("Request cancelled");
@@ -277,7 +294,7 @@ export async function consumeAgentStream(
 
   if (hooks?.signal?.aborted) {
     if (responseId) {
-      void cancelAgentResponse(responseId, serviceOrigin);
+      void cancelAgentResponse(responseId, serviceOrigin, apiKey);
     }
     throw new Error("Request cancelled");
   }
@@ -385,7 +402,8 @@ export async function performAgentResponse(
   preset: string,
   serviceOrigin?: string,
   options?: AgentToolOptions,
-  hooks?: AgentCallHooks
+  hooks?: AgentCallHooks,
+  apiKey?: ApiKeyProvider,
 ): Promise<string> {
   const webSearchTool = buildWebSearchTool(options);
 
@@ -418,8 +436,8 @@ export async function performAgentResponse(
   }
 
   try {
-    const response = await makeApiRequest("v1/agent", body, serviceOrigin, deadline.signal);
-    const agentResponse = await consumeAgentStream(response, hooks, serviceOrigin, deadline.signal);
+    const response = await makeApiRequest("v1/agent", body, serviceOrigin, deadline.signal, apiKey);
+    const agentResponse = await consumeAgentStream(response, hooks, serviceOrigin, deadline.signal, apiKey);
     return formatAgentResponseText(agentResponse);
   } catch (error) {
     if (hooks?.signal?.aborted) {
@@ -463,7 +481,8 @@ export async function performSearch(
   maxTokensPerPage: number = 1024,
   country?: string,
   filters?: Pick<AgentToolOptions, "search_recency_filter" | "search_domain_filter">,
-  serviceOrigin?: string
+  serviceOrigin?: string,
+  apiKey?: ApiKeyProvider,
 ): Promise<string> {
   const body: Record<string, unknown> = {
     query: query,
@@ -474,7 +493,7 @@ export async function performSearch(
     ...(filters?.search_domain_filter && { search_domain_filter: filters.search_domain_filter }),
   };
 
-  const response = await makeApiRequest("search", body, serviceOrigin);
+  const response = await makeApiRequest("search", body, serviceOrigin, undefined, apiKey);
 
   let data: SearchResponse;
   try {
@@ -518,7 +537,7 @@ function buildHooks(extra: ToolExtra | undefined): AgentCallHooks {
   };
 }
 
-export function createPerplexityServer(serviceOrigin?: string) {
+export function createPerplexityServer(serviceOrigin?: string, serverOptions?: PerplexityServerOptions) {
   const server = new McpServer(
     {
       name: "ai.perplexity/mcp-server",
@@ -604,6 +623,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
         serviceOrigin,
         Object.keys(options).length > 0 ? options : undefined,
         buildHooks(extra),
+        serverOptions?.apiKey,
       );
       return {
         content: [{ type: "text" as const, text: result }],
@@ -640,6 +660,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
         serviceOrigin,
         undefined,
         buildHooks(extra),
+        serverOptions?.apiKey,
       );
       return {
         content: [{ type: "text" as const, text: result }],
@@ -686,6 +707,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
         serviceOrigin,
         Object.keys(options).length > 0 ? options : undefined,
         buildHooks(extra),
+        serverOptions?.apiKey,
       );
       return {
         content: [{ type: "text" as const, text: result }],
@@ -745,7 +767,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
         ...(search_domain_filter && { search_domain_filter }),
       };
 
-      const result = await performSearch(query, maxResults, maxTokensPerPage, countryCode, filters, serviceOrigin);
+      const result = await performSearch(query, maxResults, maxTokensPerPage, countryCode, filters, serviceOrigin, serverOptions?.apiKey);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { results: result },

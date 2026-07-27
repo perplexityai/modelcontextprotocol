@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPerplexityServer, ASK_PRESET, REASON_PRESET, RESEARCH_PRESET } from "./server.js";
+import type { PerplexityServerOptions } from "./types.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -39,8 +40,8 @@ function agentSseResponse(text: string): Response {
   return { ok: true, body: stream } as unknown as Response;
 }
 
-async function connectInMemoryClient() {
-  const server = createPerplexityServer();
+async function connectInMemoryClient(serverOptions?: PerplexityServerOptions) {
+  const server = createPerplexityServer(undefined, serverOptions);
   const client = new Client({ name: "test-client", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([
@@ -356,6 +357,51 @@ describe("Transport Integration Tests", () => {
         expect(result.content[0].type).toBe("text");
         expect(result.content[0].text).toContain("Found 1 search results");
         expect(result.structuredContent.results).toBe(result.content[0].text);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("should use the configured API key provider instead of the env key", async () => {
+      process.env.PERPLEXITY_API_KEY = "pplx-env-key-must-not-be-used";
+      global.fetch = vi.fn().mockResolvedValue(agentSseResponse("tenant answer"));
+
+      const { client, server } = await connectInMemoryClient({
+        apiKey: () => "pplx-tenant-a",
+      });
+      try {
+        const result: any = await client.callTool({
+          name: "perplexity_ask",
+          arguments: { messages: [{ role: "user", content: "test" }] },
+        });
+
+        expect(result.isError).toBeFalsy();
+        const headers = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1]
+          .headers as Record<string, string>;
+        expect(headers["Authorization"]).toBe("Bearer pplx-tenant-a");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("should fail the call when the API key provider returns no key", async () => {
+      process.env.PERPLEXITY_API_KEY = "pplx-env-key-must-not-be-used";
+      global.fetch = vi.fn();
+
+      const { client, server } = await connectInMemoryClient({
+        apiKey: () => undefined,
+      });
+      try {
+        const result: any = await client.callTool({
+          name: "perplexity_ask",
+          arguments: { messages: [{ role: "user", content: "test" }] },
+        });
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("API key provider returned no key");
+        expect(global.fetch).not.toHaveBeenCalled();
       } finally {
         await client.close();
         await server.close();

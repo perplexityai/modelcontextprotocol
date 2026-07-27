@@ -386,6 +386,41 @@ describe("Perplexity MCP Server", () => {
       });
     });
 
+    it("should use the provider key for the server-side cancel on timeout", async () => {
+      process.env.PERPLEXITY_TIMEOUT_MS = "100";
+      const authHeaders: string[] = [];
+
+      global.fetch = vi.fn().mockImplementation((url, options) => {
+        authHeaders.push(
+          (options?.headers as Record<string, string>)["Authorization"]
+        );
+        if (String(url).includes("/cancel")) {
+          return Promise.resolve({ ok: true, json: async () => ({}) } as unknown as Response);
+        }
+        const signal = options?.signal as AbortSignal | undefined;
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encodeSse([{ type: "response.created", response: { id: "resp_stall" } }])
+            );
+            signal?.addEventListener("abort", () => {
+              controller.error(
+                new DOMException("The operation was aborted.", "AbortError")
+              );
+            });
+          },
+        });
+        return Promise.resolve({ ok: true, body: stream } as unknown as Response);
+      });
+
+      await expect(
+        performAgentResponse(TEST_MESSAGES, "medium", undefined, undefined, undefined, () => "pplx-tenant-cancel")
+      ).rejects.toThrow("Request timeout");
+      await vi.waitFor(() => expect(authHeaders).toHaveLength(2));
+      // Both the original call and the fire-and-forget cancel carry the provider key.
+      expect(authHeaders).toEqual(["Bearer pplx-tenant-cancel", "Bearer pplx-tenant-cancel"]);
+    });
+
     it("should return the answer when the stream stays open after completion", async () => {
       process.env.PERPLEXITY_TIMEOUT_MS = "100";
       const cancelCalls: string[] = [];

@@ -147,6 +147,26 @@ npm install && npm run build && npm run start:http
 
 The server will be accessible at `http://localhost:8080/mcp`
 
+## Use as a Library
+
+The package also exports the server factory for embedding in your own Node process:
+
+```ts
+import { createPerplexityServer } from "@perplexity-ai/mcp-server";
+
+// Single-tenant: reads PERPLEXITY_API_KEY from the environment.
+const server = createPerplexityServer("my-service");
+
+// Multi-tenant hosts resolve the key per call instead. When a provider is
+// set, the environment variable is never consulted, and a provider that
+// returns no key fails the call rather than falling back.
+const tenantServer = createPerplexityServer("my-service", {
+  apiKey: () => currentRequestApiKey,
+});
+```
+
+Mount the returned server on any MCP transport (stdio, streamable HTTP, in-memory).
+
 ## Troubleshooting
 
 - **API Key Issues**: Ensure `PERPLEXITY_API_KEY` is set correctly
