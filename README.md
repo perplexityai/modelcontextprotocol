@@ -13,7 +13,7 @@ The official MCP server implementation for the Perplexity API Platform, providin
 ## Available Tools
 
 ### **perplexity_search**
-Direct web search using the Perplexity Search API. Returns ranked search results with metadata, perfect for finding current information.
+Direct web search using the Perplexity Search API. Returns ranked search results with metadata, perfect for finding current information. Supports recency filters (`search_recency_filter`) and domain restrictions (`search_domain_filter`).
 
 ### **perplexity_ask**
 General-purpose conversational AI with real-time web search, backed by the Agent API `fast` preset. Great for quick questions and everyday searches.

@@ -462,6 +462,7 @@ export async function performSearch(
   maxResults: number = 10,
   maxTokensPerPage: number = 1024,
   country?: string,
+  filters?: Pick<AgentToolOptions, "search_recency_filter" | "search_domain_filter">,
   serviceOrigin?: string
 ): Promise<string> {
   const body: Record<string, unknown> = {
@@ -469,6 +470,8 @@ export async function performSearch(
     max_results: maxResults,
     max_tokens_per_page: maxTokensPerPage,
     ...(country && { country }),
+    ...(filters?.search_recency_filter && { search_recency_filter: filters.search_recency_filter }),
+    ...(filters?.search_domain_filter && { search_domain_filter: filters.search_domain_filter }),
   };
 
   const response = await makeApiRequest("search", body, serviceOrigin);
@@ -524,7 +527,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
     {
       instructions:
         "Perplexity AI server for web-grounded search, research, and reasoning, backed by the Perplexity Agent API. " +
-        "Use perplexity_search for finding URLs, facts, and recent news. " +
+        "Use perplexity_search for finding URLs, facts, and recent news. Supports recency filters and domain restrictions. " +
         "Use perplexity_ask for quick AI-answered questions with citations. Supports recency filters, domain restrictions, and search context size control. " +
         "Use perplexity_research for in-depth multi-source investigation (slow, can take minutes). " +
         "Use perplexity_reason for complex analysis requiring step-by-step logic. Supports recency filters, domain restrictions, and search context size control. " +
@@ -699,6 +702,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
       .describe("Maximum tokens to extract per webpage (default: 1024)"),
     country: z.string().optional()
       .describe("ISO 3166-1 alpha-2 country code for regional results (e.g., 'US', 'GB')"),
+    search_recency_filter: searchRecencyFilterField,
+    search_domain_filter: searchDomainFilterField,
   };
 
   const searchOutputSchema = {
@@ -712,6 +717,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
       description: "Search the web and return a ranked list of results with titles, URLs, snippets, and dates. " +
         "Best for: finding specific URLs, checking recent news, verifying facts, discovering sources. " +
         "Returns formatted results (title, URL, snippet, date) with no AI synthesis. " +
+        "Supports recency filters and domain restrictions. " +
         "For AI-generated answers with citations, use perplexity_ask instead.",
       inputSchema: searchInputSchema as any,
       outputSchema: searchOutputSchema as any,
@@ -723,17 +729,23 @@ export function createPerplexityServer(serviceOrigin?: string) {
       },
     },
     async (args: any) => {
-      const { query, max_results, max_tokens_per_page, country } = args as {
+      const { query, max_results, max_tokens_per_page, country, search_recency_filter, search_domain_filter } = args as {
         query: string;
         max_results?: number;
         max_tokens_per_page?: number;
         country?: string;
+        search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
+        search_domain_filter?: string[];
       };
       const maxResults = typeof max_results === "number" ? max_results : 10;
       const maxTokensPerPage = typeof max_tokens_per_page === "number" ? max_tokens_per_page : 1024;
       const countryCode = typeof country === "string" ? country : undefined;
+      const filters = {
+        ...(search_recency_filter && { search_recency_filter }),
+        ...(search_domain_filter && { search_domain_filter }),
+      };
 
-      const result = await performSearch(query, maxResults, maxTokensPerPage, countryCode, serviceOrigin);
+      const result = await performSearch(query, maxResults, maxTokensPerPage, countryCode, filters, serviceOrigin);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { results: result },

@@ -348,6 +348,38 @@ describe("Transport Integration Tests", () => {
       }
     });
 
+    it("should forward search filters to the search API request body", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ results: [] }),
+      } as Response);
+
+      const { client, server } = await connectInMemoryClient();
+      try {
+        const result: any = await client.callTool({
+          name: "perplexity_search",
+          arguments: {
+            query: "test",
+            search_recency_filter: "week",
+            search_domain_filter: ["wikipedia.org", "-reddit.com"],
+          },
+        });
+
+        expect(result.isError).toBeFalsy();
+        const upstreamBody = JSON.parse(
+          (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string
+        );
+        expect(upstreamBody).toMatchObject({
+          query: "test",
+          search_recency_filter: "week",
+          search_domain_filter: ["wikipedia.org", "-reddit.com"],
+        });
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
     it("should emit progress notifications when the client requests progress", async () => {
       const events = [
         { type: "response.created", response: { id: "resp_progress" } },
