@@ -1,6 +1,6 @@
 {
   "name": "@perplexity-ai/mcp-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "mcpName": "ai.perplexity/mcp-server",
   "description": "Real-time web search, reasoning, and research through Perplexity's API",
   "keywords": [
@@ -23,14 +23,25 @@
     "access": "public"
   },
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "perplexity-mcp": "dist/index.js"
   },
   "files": [
     "dist/*.js",
+    "dist/*.d.ts",
     "!dist/*.test.js",
+    "!dist/*.test.d.ts",
     "!dist/vitest.config.js",
+    "!dist/vitest.config.d.ts",
     "README.md",
     ".claude-plugin"
   ],
