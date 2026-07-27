@@ -59,3 +59,5 @@ Desktop.ini
 *.pem
 mcp-publisher
 migrate-namespace.sh
+
+*.tgz

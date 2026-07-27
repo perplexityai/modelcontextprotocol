@@ -6,6 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import express from "express";
 import cors from "cors";
 import { Server } from "http";
+import { readFileSync } from "node:fs";
 
 function agentSseResponse(text: string): Response {
   const completed = {
@@ -267,6 +268,19 @@ describe("Transport Integration Tests", () => {
   });
 
   describe("Backward Compatibility", () => {
+    it("should advertise the package.json version to clients", async () => {
+      const { client, server } = await connectInMemoryClient();
+      try {
+        const pkg = JSON.parse(
+          readFileSync(new URL("../package.json", import.meta.url), "utf8")
+        );
+        expect(client.getServerVersion()?.version).toBe(pkg.version);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
     it("should keep the historical response shape including the citations block", async () => {
       global.fetch = vi
         .fn()
