@@ -8,7 +8,7 @@
 &nbsp;
 [![npm version](https://img.shields.io/npm/v/%40perplexity-ai%2Fmcp-server?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@perplexity-ai/mcp-server)
 
-The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through Sonar models and the Search API.
+The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through the Agent API and Search API.
 
 ## Available Tools
 
@@ -16,13 +16,15 @@ The official MCP server implementation for the Perplexity API Platform, providin
 Direct web search using the Perplexity Search API. Returns ranked search results with metadata, perfect for finding current information.
 
 ### **perplexity_ask**
-General-purpose conversational AI with real-time web search using the `sonar-pro` model. Great for quick questions and everyday searches.
+General-purpose conversational AI with real-time web search using the Agent API `fast` preset by default. Great for quick questions and everyday searches.
 
 ### **perplexity_research**
-Deep, comprehensive research using the `sonar-deep-research` model. Ideal for thorough analysis and detailed reports.
+Deep, comprehensive research using the Agent API `medium` preset by default. Ideal for thorough analysis and detailed reports.
 
 ### **perplexity_reason**
-Advanced reasoning and problem-solving using the `sonar-reasoning-pro` model. Perfect for complex analytical tasks.
+Advanced reasoning and problem-solving using the Agent API `low` preset by default. Perfect for complex analytical tasks.
+
+The three Agent API tools accept optional `model` and `preset` parameters. Use `model` for a provider/model ID such as `perplexity/sonar`, or `preset` for any current Agent API preset. If both are provided, the model overrides the preset's model while retaining its other configuration.
 
 > [!TIP]
 > Available as an optional parameter for **perplexity_reason** and **perplexity_research**: `strip_thinking`

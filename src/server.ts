@@ -3,17 +3,29 @@ import { z } from "zod";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 import type {
   Message,
-  ChatCompletionResponse,
-  ChatCompletionOptions,
   SearchResponse,
   SearchRequestBody,
+  AgentModelSelection,
+  AgentRequestOptions,
+  AgentResponseResult,
+  AgentSearchResult,
   UndiciRequestOptions
 } from "./types.js";
-import { ChatCompletionResponseSchema, SearchResponseSchema } from "./validation.js";
+import {
+  AgentCompletedEventSchema,
+  AgentFailedEventSchema,
+  AgentMessageOutputSchema,
+  AgentOutputTextDeltaEventSchema,
+  AgentRequestSchema,
+  AgentSearchResultsEventSchema,
+  AgentSearchResultsOutputSchema,
+  SearchResponseSchema,
+} from "./validation.js";
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
-const VERSION = "0.9.0";
+const VERSION = "0.10.0";
+type DefaultAgentPreset = "fast" | "low" | "medium";
 
 export function getProxyUrl(): string | undefined {
   return process.env.PERPLEXITY_PROXY || 
@@ -118,7 +130,38 @@ async function makeApiRequest(
   return response;
 }
 
-export async function consumeSSEStream(response: Response): Promise<ChatCompletionResponse> {
+function extractAgentOutput(output: unknown[]): AgentResponseResult {
+  const contentParts: string[] = [];
+  const searchResults: AgentSearchResult[] = [];
+
+  for (const item of output) {
+    const message = AgentMessageOutputSchema.safeParse(item);
+    if (message.success) {
+      contentParts.push(...message.data.content.map((content) => content.text));
+      continue;
+    }
+
+    const results = AgentSearchResultsOutputSchema.safeParse(item);
+    if (results.success) {
+      searchResults.push(...results.data.results);
+    }
+  }
+
+  return { content: contentParts.join(""), searchResults };
+}
+
+function mergeSearchResults(
+  existing: AgentSearchResult[],
+  incoming: AgentSearchResult[],
+): AgentSearchResult[] {
+  const resultsById = new Map(existing.map((result) => [String(result.id), result]));
+  for (const result of incoming) {
+    resultsById.set(String(result.id), result);
+  }
+  return [...resultsById.values()];
+}
+
+export async function consumeAgentSSEStream(response: Response): Promise<AgentResponseResult> {
   const body = response.body;
   if (!body) {
     throw new Error("Response body is null");
@@ -126,127 +169,118 @@ export async function consumeSSEStream(response: Response): Promise<ChatCompleti
 
   const reader = (body as ReadableStream<Uint8Array>).getReader();
   const decoder = new TextDecoder();
-
-  let contentParts: string[] = [];
-  let citations: string[] | undefined;
-  let usage: ChatCompletionResponse["usage"] | undefined;
-  let id: string | undefined;
-  let model: string | undefined;
-  let created: number | undefined;
+  const contentParts: string[] = [];
+  let searchResults: AgentSearchResult[] = [];
+  let completedContent = "";
   let buffer = "";
+
+  const processLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) return;
+
+    const data = trimmed.slice("data:".length).trim();
+    if (!data || data === "[DONE]") return;
+
+    let event: unknown;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      return;
+    }
+
+    const delta = AgentOutputTextDeltaEventSchema.safeParse(event);
+    if (delta.success) {
+      contentParts.push(delta.data.delta);
+      return;
+    }
+
+    const streamedResults = AgentSearchResultsEventSchema.safeParse(event);
+    if (streamedResults.success) {
+      searchResults = mergeSearchResults(searchResults, streamedResults.data.results);
+      return;
+    }
+
+    const completed = AgentCompletedEventSchema.safeParse(event);
+    if (completed.success) {
+      const output = extractAgentOutput(completed.data.response.output);
+      completedContent = output.content;
+      searchResults = mergeSearchResults(searchResults, output.searchResults);
+      return;
+    }
+
+    const failed = AgentFailedEventSchema.safeParse(event);
+    if (failed.success) {
+      const message = failed.data.response.error?.message ?? "Unknown error";
+      throw new Error(`Agent API response failed: ${message}`);
+    }
+  };
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
-
     const lines = buffer.split("\n");
-    // Keep the last potentially incomplete line in the buffer
     buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith("data:")) continue;
-
-      const data = trimmed.slice("data:".length).trim();
-      if (data === "[DONE]") continue;
-
-      try {
-        const parsed = JSON.parse(data);
-
-        if (parsed.id) id = parsed.id;
-        if (parsed.model) model = parsed.model;
-        if (parsed.created) created = parsed.created;
-        if (parsed.citations) citations = parsed.citations;
-        if (parsed.usage) usage = parsed.usage;
-
-        const delta = parsed.choices?.[0]?.delta;
-        if (delta?.content) {
-          contentParts.push(delta.content);
-        }
-      } catch {
-        // Skip malformed JSON chunks (e.g. keep-alive pings)
-      }
-    }
+    lines.forEach(processLine);
   }
+  buffer += decoder.decode();
+  if (buffer) processLine(buffer);
 
-  const assembled: ChatCompletionResponse = {
-    choices: [
-      {
-        message: { content: contentParts.join("") },
-        finish_reason: "stop",
-        index: 0,
-      },
-    ],
-    ...(citations && { citations }),
-    ...(usage && { usage }),
-    ...(id && { id }),
-    ...(model && { model }),
-    ...(created && { created }),
+  return {
+    content: contentParts.length > 0 ? contentParts.join("") : completedContent,
+    searchResults,
   };
-
-  return ChatCompletionResponseSchema.parse(assembled);
 }
 
-export async function performChatCompletion(
+function formatAgentResponse(result: AgentResponseResult, stripThinking: boolean): string {
+  let content = stripThinking ? stripThinkingTokens(result.content) : result.content;
+  if (result.searchResults.length === 0) return content;
+
+  content += "\n\nCitations:\n";
+  for (const citation of result.searchResults) {
+    content += `[${citation.id}] ${citation.url}\n`;
+  }
+  return content;
+}
+
+export async function performAgentResponse(
   messages: Message[],
-  model: string = "sonar-pro",
-  stripThinking: boolean = false,
+  options: AgentRequestOptions,
   serviceOrigin?: string,
-  options?: ChatCompletionOptions
 ): Promise<string> {
-  const useStreaming = model === "sonar-deep-research";
-
-  const body: Record<string, unknown> = {
-    model: model,
-    messages: messages,
-    ...(useStreaming && { stream: true }),
-    ...(options?.search_recency_filter && { search_recency_filter: options.search_recency_filter }),
-    ...(options?.search_domain_filter && { search_domain_filter: options.search_domain_filter }),
-    ...(options?.search_context_size && { web_search_options: { search_context_size: options.search_context_size } }),
-    ...(options?.reasoning_effort && { reasoning_effort: options.reasoning_effort }),
+  const filters = {
+    ...(options.search_recency_filter && {
+      search_recency_filter: options.search_recency_filter,
+    }),
+    ...(options.search_domain_filter && {
+      search_domain_filter: options.search_domain_filter,
+    }),
   };
-
-  const response = await makeApiRequest("chat/completions", body, serviceOrigin);
-
-  let data: ChatCompletionResponse;
-  try {
-    if (useStreaming) {
-      data = await consumeSSEStream(response);
-    } else {
-      const json = await response.json();
-      data = ChatCompletionResponseSchema.parse(json);
-    }
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      const issues = error.issues;
-      if (issues.some(i => i.path.includes('message') || i.path.includes('content'))) {
-        throw new Error("Invalid API response: missing message content");
-      }
-      if (issues.some(i => i.path.includes('choices'))) {
-        throw new Error("Invalid API response: missing or empty choices array");
-      }
-    }
-    throw new Error(`Failed to parse JSON response from Perplexity API: ${error}`);
-  }
-
-  const firstChoice = data.choices[0];
-
-  let messageContent = firstChoice.message.content;
-
-  if (stripThinking) {
-    messageContent = stripThinkingTokens(messageContent);
-  }
-
-  if (data.citations && Array.isArray(data.citations) && data.citations.length > 0) {
-    messageContent += "\n\nCitations:\n";
-    data.citations.forEach((citation, index) => {
-      messageContent += `[${index + 1}] ${citation}\n`;
-    });
-  }
-
-  return messageContent;
+  const hasSearchOptions =
+    Object.keys(filters).length > 0 || options.search_context_size !== undefined;
+  const tools = hasSearchOptions
+    ? [{
+        type: "web_search" as const,
+        ...(options.search_context_size && {
+          search_context_size: options.search_context_size,
+        }),
+        ...(Object.keys(filters).length > 0 && { filters }),
+      }]
+    : undefined;
+  const body = AgentRequestSchema.parse({
+    model: options.model,
+    preset: options.preset,
+    input: messages,
+    stream: true,
+    tools,
+    ...(options.reasoning_effort && {
+      reasoning: { effort: options.reasoning_effort },
+    }),
+  });
+  const response = await makeApiRequest("v1/agent", body, serviceOrigin);
+  const result = await consumeAgentSSEStream(response);
+  return formatAgentResponse(result, options.strip_thinking ?? false);
 }
 
 export function formatSearchResults(data: SearchResponse): string {
@@ -336,20 +370,46 @@ export function createPerplexityServer(serviceOrigin?: string) {
   
   const reasoningEffortField = z.enum(["minimal", "low", "medium", "high"]).optional()
     .describe("Controls depth of deep research reasoning. Higher values produce more thorough analysis.");
+
+  const modelField = z.string().min(1).optional()
+    .describe(
+      "Agent API model in provider/model format (for example, 'perplexity/sonar'). " +
+      "Overrides the tool's default preset.",
+    );
+
+  const presetField = z.string().min(1).optional()
+    .describe(
+      "Agent API preset (for example, 'fast', 'low', or 'medium'). " +
+      "Uses the tool's default preset when both preset and model are omitted.",
+    );
   
   const responseOutputSchema = {
     response: z.string().describe("AI-generated text response with numbered citation references"),
   };
 
+  const selectAgentModel = (
+    model: string | undefined,
+    preset: string | undefined,
+    defaultPreset: DefaultAgentPreset,
+  ): AgentModelSelection => ({
+    ...(!model && !preset && { preset: defaultPreset }),
+    ...(preset && { preset }),
+    ...(model && { model }),
+  });
+
   // Input schemas
   const messagesOnlyInputSchema = { 
     messages: messagesField,
+    model: modelField,
+    preset: presetField,
     search_recency_filter: searchRecencyFilterField,
     search_domain_filter: searchDomainFilterField,
     search_context_size: searchContextSizeField,
   };
   const messagesWithStripThinkingInputSchema = { 
     messages: messagesField, 
+    model: modelField,
+    preset: presetField,
     strip_thinking: stripThinkingField,
     search_recency_filter: searchRecencyFilterField,
     search_domain_filter: searchDomainFilterField,
@@ -357,6 +417,8 @@ export function createPerplexityServer(serviceOrigin?: string) {
   };
   const researchInputSchema = {
     messages: messagesField,
+    model: modelField,
+    preset: presetField,
     strip_thinking: stripThinkingField,
     reasoning_effort: reasoningEffortField,
   };
@@ -365,7 +427,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
     "perplexity_ask",
     {
       title: "Ask Perplexity",
-      description: "Answer a question using web-grounded AI (Sonar Pro model). " +
+      description: "Answer a question using Perplexity's Agent API (fast preset by default). " +
         "Best for: quick factual questions, summaries, explanations, and general Q&A. " +
         "Returns a text response with numbered citations. Fastest and cheapest option. " +
         "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search context size. " +
@@ -381,19 +443,22 @@ export function createPerplexityServer(serviceOrigin?: string) {
       },
     },
     async (args: any) => {
-      const { messages, search_recency_filter, search_domain_filter, search_context_size } = args as { 
+      const { messages, model, preset, search_recency_filter, search_domain_filter, search_context_size } = args as {
         messages: Message[];
+        model?: string;
+        preset?: string;
         search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
         search_domain_filter?: string[];
         search_context_size?: "low" | "medium" | "high";
       };
       validateMessages(messages, "perplexity_ask");
-      const options = {
+      const options: AgentRequestOptions = {
+        ...selectAgentModel(model, preset, "fast"),
         ...(search_recency_filter && { search_recency_filter }),
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
       };
-      const result = await performChatCompletion(messages, "sonar-pro", false, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const result = await performAgentResponse(messages, options, serviceOrigin);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -405,7 +470,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
     "perplexity_research",
     {
       title: "Deep Research",
-      description: "Conduct deep, multi-source research on a topic (Sonar Deep Research model). " +
+      description: "Conduct deep, multi-source research using Perplexity's Agent API (medium preset by default). " +
         "Best for: literature reviews, comprehensive overviews, investigative queries needing " +
         "many sources. Returns a detailed response with numbered citations. " +
         "Significantly slower than other tools (30+ seconds). " +
@@ -421,17 +486,20 @@ export function createPerplexityServer(serviceOrigin?: string) {
       },
     },
     async (args: any) => {
-      const { messages, strip_thinking, reasoning_effort } = args as { 
+      const { messages, model, preset, strip_thinking, reasoning_effort } = args as {
         messages: Message[];
+        model?: string;
+        preset?: string;
         strip_thinking?: boolean;
         reasoning_effort?: "minimal" | "low" | "medium" | "high";
       };
       validateMessages(messages, "perplexity_research");
-      const stripThinking = typeof strip_thinking === "boolean" ? strip_thinking : false;
-      const options = {
+      const options: AgentRequestOptions = {
+        ...selectAgentModel(model, preset, "medium"),
+        strip_thinking: strip_thinking ?? false,
         ...(reasoning_effort && { reasoning_effort }),
       };
-      const result = await performChatCompletion(messages, "sonar-deep-research", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const result = await performAgentResponse(messages, options, serviceOrigin);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -443,7 +511,7 @@ export function createPerplexityServer(serviceOrigin?: string) {
     "perplexity_reason",
     {
       title: "Advanced Reasoning",
-      description: "Analyze a question using step-by-step reasoning with web grounding (Sonar Reasoning Pro model). " +
+      description: "Analyze a question using Perplexity's Agent API (low preset by default). " +
         "Best for: math, logic, comparisons, complex arguments, and tasks requiring chain-of-thought. " +
         "Returns a reasoned response with numbered citations. " +
         "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search context size. " +
@@ -459,21 +527,24 @@ export function createPerplexityServer(serviceOrigin?: string) {
       },
     },
     async (args: any) => {
-      const { messages, strip_thinking, search_recency_filter, search_domain_filter, search_context_size } = args as { 
+      const { messages, model, preset, strip_thinking, search_recency_filter, search_domain_filter, search_context_size } = args as {
         messages: Message[];
+        model?: string;
+        preset?: string;
         strip_thinking?: boolean;
         search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
         search_domain_filter?: string[];
         search_context_size?: "low" | "medium" | "high";
       };
       validateMessages(messages, "perplexity_reason");
-      const stripThinking = typeof strip_thinking === "boolean" ? strip_thinking : false;
-      const options = {
+      const options: AgentRequestOptions = {
+        ...selectAgentModel(model, preset, "low"),
+        strip_thinking: strip_thinking ?? false,
         ...(search_recency_filter && { search_recency_filter }),
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
       };
-      const result = await performChatCompletion(messages, "sonar-reasoning-pro", stripThinking, serviceOrigin, Object.keys(options).length > 0 ? options : undefined);
+      const result = await performAgentResponse(messages, options, serviceOrigin);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { response: result },
@@ -533,4 +604,3 @@ export function createPerplexityServer(serviceOrigin?: string) {
 
   return server.server;
 }
-

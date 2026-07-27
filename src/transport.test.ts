@@ -161,6 +161,14 @@ describe("Transport Integration Tests", () => {
       // Verify tool schema structure
       expect(data.result.tools[0].inputSchema).toBeDefined();
       expect(data.result.tools[0].description).toBeDefined();
+
+      const generativeTools = data.result.tools.filter(
+        (tool: { name: string }) => tool.name !== "perplexity_search",
+      );
+      for (const tool of generativeTools) {
+        expect(tool.inputSchema.properties.model).toBeDefined();
+        expect(tool.inputSchema.properties.preset).toBeDefined();
+      }
     });
 
     it("should handle tool calls via HTTP with real transport", async () => {
@@ -228,6 +236,67 @@ describe("Transport Integration Tests", () => {
       expect(data.result).toBeDefined();
       expect(data.result.isError).toBe(true);
       expect(data.result.content[0].text).toContain("not found");
+    });
+
+    it("routes generative tool calls through the Agent API", async () => {
+      app.post("/mcp", async (req, res) => {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+          enableJsonResponse: true,
+        });
+        res.on("close", () => transport.close());
+
+        const server = createPerplexityServer();
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+      });
+
+      httpServer = app.listen(0);
+      const address = httpServer.address();
+      const port = typeof address === "object" && address ? address.port : 3000;
+      const apiFetch = vi.fn().mockResolvedValue(new Response(
+        [
+          `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Agent answer" })}\n\n`,
+          "data: [DONE]\n\n",
+        ].join(""),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ));
+      global.fetch = apiFetch;
+
+      const response = await originalFetch(`http://localhost:${port}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json, text/event-stream",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: {
+            name: "perplexity_ask",
+            arguments: {
+              messages: [{ role: "user", content: "test question" }],
+              model: "perplexity/sonar",
+            },
+          },
+        }),
+      });
+      const data = await response.json();
+
+      expect(data.result.content).toEqual([{ type: "text", text: "Agent answer" }]);
+      expect(data.result.structuredContent).toEqual({ response: "Agent answer" });
+      expect(apiFetch).toHaveBeenCalledWith(
+        "https://api.perplexity.ai/v1/agent",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            input: [{ role: "user", content: "test question" }],
+            model: "perplexity/sonar",
+            stream: true,
+          }),
+        }),
+      );
     });
 
     it("should handle HTTP errors properly", async () => {
