@@ -124,17 +124,19 @@ export function createHttpApp(options: HttpAppOptions): Express {
 
   app.use(express.json());
 
-  const mcpServer = createPerplexityServer();
-
   app.all("/mcp", async (req, res) => {
     try {
+      // Stateless mode: a Protocol instance supports one transport, so build
+      // a fresh server + transport pair per request.
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
       });
+      const mcpServer = createPerplexityServer();
 
       res.on("close", () => {
         transport.close();
+        mcpServer.close();
       });
 
       await mcpServer.connect(transport);

@@ -350,4 +350,47 @@ describe("HTTP transport configuration", () => {
       expect(status).toBe(200);
     });
   });
+
+  describe("stateless request handling", () => {
+    it("serves multiple sequential requests on one app instance", async () => {
+      await start();
+
+      const listTools = () =>
+        fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/list",
+            params: {},
+          }),
+        });
+
+      // A single server instance can only bind one transport, so the app must
+      // build a fresh pair per request; before that fix the second request
+      // failed with a 500 "Already connected to a transport".
+      const first = await listTools();
+      expect(first.status).toBe(200);
+
+      const second = await listTools();
+      expect(second.status).toBe(200);
+      const data = await second.json();
+      expect(data.result.tools).toHaveLength(4);
+    });
+
+    it("serves the health endpoint", async () => {
+      await start();
+
+      const response = await fetch(`${baseUrl}/health`);
+      expect(response.ok).toBe(true);
+      expect(await response.json()).toEqual({
+        status: "ok",
+        service: "perplexity-mcp-server",
+      });
+    });
+  });
 });
