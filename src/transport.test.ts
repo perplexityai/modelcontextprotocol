@@ -1,10 +1,53 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createPerplexityServer } from "./server.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createPerplexityServer, ASK_PRESET, REASON_PRESET, RESEARCH_PRESET } from "./server.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import express from "express";
 import cors from "cors";
 import { Server } from "http";
+
+function agentSseResponse(text: string): Response {
+  const completed = {
+    type: "response.completed",
+    response: {
+      id: "resp_transport_test",
+      status: "completed",
+      output: [
+        {
+          type: "search_results",
+          results: [{ id: 1, url: "https://example.com/source" }],
+        },
+        {
+          type: "message",
+          id: "msg_1",
+          status: "completed",
+          role: "assistant",
+          content: [{ type: "output_text", text, annotations: [] }],
+        },
+      ],
+    },
+  };
+  const payload = `data: ${JSON.stringify(completed)}\n\ndata: [DONE]\n\n`;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(payload));
+      controller.close();
+    },
+  });
+  return { ok: true, body: stream } as unknown as Response;
+}
+
+async function connectInMemoryClient() {
+  const server = createPerplexityServer();
+  const client = new Client({ name: "test-client", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([
+    server.connect(serverTransport),
+    client.connect(clientTransport),
+  ]);
+  return { client, server };
+}
 
 describe("Transport Integration Tests", () => {
   let originalFetch: typeof global.fetch;
@@ -20,56 +63,6 @@ describe("Transport Integration Tests", () => {
     global.fetch = originalFetch;
     process.env = originalEnv;
     vi.restoreAllMocks();
-  });
-
-  describe("Server Factory", () => {
-    it("should create a server with all tools registered", () => {
-      const server = createPerplexityServer();
-      
-      expect(server).toBeDefined();
-      // The server should be the underlying Server instance from McpServer
-      expect(typeof server.connect).toBe("function");
-      expect(typeof server.close).toBe("function");
-    });
-
-    it("should fail if PERPLEXITY_API_KEY is not set", () => {
-      delete process.env.PERPLEXITY_API_KEY;
-      
-      // The server creation itself doesn't fail, but tool calls should fail
-      const server = createPerplexityServer();
-      expect(server).toBeDefined();
-    });
-  });
-
-  describe("STDIO Transport", () => {
-    it("should connect successfully to STDIO transport", async () => {
-      const server = createPerplexityServer();
-      const transport = new StdioServerTransport();
-      
-      // Mock the transport connection
-      const connectSpy = vi.spyOn(transport, 'start').mockResolvedValue(undefined);
-      const closeSpy = vi.spyOn(transport, 'close').mockImplementation(() => Promise.resolve());
-      
-      await server.connect(transport);
-      
-      expect(connectSpy).toHaveBeenCalled();
-      
-      // Clean up
-      transport.close();
-      server.close();
-    });
-
-    it("should handle STDIO transport errors gracefully", async () => {
-      const server = createPerplexityServer();
-      const transport = new StdioServerTransport();
-      
-      // Mock transport to throw error
-      vi.spyOn(transport, 'start').mockRejectedValue(new Error("Transport error"));
-      
-      await expect(server.connect(transport)).rejects.toThrow("Transport error");
-      
-      server.close();
-    });
   });
 
   describe("HTTP Transport", () => {
@@ -230,38 +223,6 @@ describe("Transport Integration Tests", () => {
       expect(data.result.content[0].text).toContain("not found");
     });
 
-    it("should handle HTTP errors properly", async () => {
-      app.post("/mcp", async (req, res) => {
-        res.status(400).json({
-          jsonrpc: "2.0",
-          error: { code: -32600, message: "Invalid Request" },
-          id: null,
-        });
-      });
-
-      httpServer = app.listen(0);
-      const address = httpServer.address();
-      const port = typeof address === 'object' && address ? address.port : 3000;
-
-      const response = await fetch(`http://localhost:${port}/mcp`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json, text/event-stream",
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "invalid/method",
-          params: {}
-        }),
-      });
-
-      expect(response.status).toBe(400);
-      const data = await response.json();
-      expect(data.error.message).toBe("Invalid Request");
-    });
-
     it("should require proper Accept headers", async () => {
       app.post("/mcp", async (req, res) => {
         const transport = new StreamableHTTPServerTransport({
@@ -305,62 +266,178 @@ describe("Transport Integration Tests", () => {
     });
   });
 
-  describe("Transport Comparison", () => {
-    it("should produce identical results for both transports", async () => {
-      const mockResponse = {
-        choices: [{ message: { content: "Identical response" } }]
-      };
+  describe("Backward Compatibility", () => {
+    it("should keep the historical response shape including the citations block", async () => {
+      global.fetch = vi
+        .fn()
+        .mockResolvedValue(agentSseResponse("The answer[1]."));
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      } as Response);
-
-      // Test STDIO (we can't easily test the actual transport, but we can test the server)
-      const server1 = createPerplexityServer();
-      const server2 = createPerplexityServer();
-
-      // Both should be identical server instances with same capabilities
-      expect(server1).toBeDefined();
-      expect(server2).toBeDefined();
-      
-      // Clean up
-      server1.close();
-      server2.close();
-    });
-  });
-
-  describe("Health Check", () => {
-    let healthApp: express.Application;
-    let healthHttpServer: Server;
-
-    beforeEach(() => {
-      healthApp = express();
-    });
-
-    afterEach(async () => {
-      if (healthHttpServer) {
-        await new Promise<void>((resolve) => {
-          healthHttpServer.close(() => resolve());
+      const { client, server } = await connectInMemoryClient();
+      try {
+        const result: any = await client.callTool({
+          name: "perplexity_ask",
+          arguments: { messages: [{ role: "user", content: "test" }] },
         });
+
+        expect(result.isError).toBeFalsy();
+        expect(result.content[0].type).toBe("text");
+        expect(result.content[0].text).toContain("The answer[1].");
+        expect(result.content[0].text).toContain(
+          "\n\nCitations:\n[1] https://example.com/source"
+        );
+        expect(result.structuredContent.response).toBe(result.content[0].text);
+      } finally {
+        await client.close();
+        await server.close();
       }
     });
 
-    it("should provide health check endpoint for HTTP mode", async () => {
-      healthApp.get("/health", (req: express.Request, res: express.Response) => {
-        res.json({ status: "ok", service: "perplexity-mcp-server" });
+    it.each(["perplexity_ask", "perplexity_reason", "perplexity_research"])(
+      "should ignore removed legacy parameters on %s instead of rejecting them",
+      async (tool) => {
+        global.fetch = vi.fn().mockResolvedValue(agentSseResponse("ok"));
+
+        const { client, server } = await connectInMemoryClient();
+        try {
+          const result: any = await client.callTool({
+            name: tool,
+            arguments: {
+              messages: [{ role: "user", content: "test" }],
+              strip_thinking: true,
+              reasoning_effort: "high",
+            },
+          });
+
+          expect(result.isError).toBeFalsy();
+          const upstreamBody = JSON.parse(
+            (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string
+          );
+          expect(upstreamBody).not.toHaveProperty("strip_thinking");
+          expect(upstreamBody).not.toHaveProperty("reasoning_effort");
+        } finally {
+          await client.close();
+          await server.close();
+        }
+      }
+    );
+
+    it("should keep the search tool response shape", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            { title: "Result", url: "https://example.com", snippet: "snippet" },
+          ],
+        }),
+      } as Response);
+
+      const { client, server } = await connectInMemoryClient();
+      try {
+        const result: any = await client.callTool({
+          name: "perplexity_search",
+          arguments: { query: "test" },
+        });
+
+        expect(result.isError).toBeFalsy();
+        expect(result.content[0].type).toBe("text");
+        expect(result.content[0].text).toContain("Found 1 search results");
+        expect(result.structuredContent.results).toBe(result.content[0].text);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("should emit progress notifications when the client requests progress", async () => {
+      const events = [
+        { type: "response.created", response: { id: "resp_progress" } },
+        {
+          type: "response.reasoning.search_queries",
+          queries: ["progress test query"],
+        },
+        {
+          type: "response.completed",
+          response: {
+            id: "resp_progress",
+            status: "completed",
+            output: [
+              {
+                type: "message",
+                id: "msg_1",
+                status: "completed",
+                role: "assistant",
+                content: [{ type: "output_text", text: "done", annotations: [] }],
+              },
+            ],
+          },
+        },
+      ];
+      const payload =
+        events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("") +
+        "data: [DONE]\n\n";
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(payload));
+          controller.close();
+        },
       });
+      global.fetch = vi
+        .fn()
+        .mockResolvedValue({ ok: true, body: stream } as unknown as Response);
 
-      healthHttpServer = healthApp.listen(0);
-      const address = healthHttpServer.address();
-      const port = typeof address === 'object' && address ? address.port : 3000;
+      const { client, server } = await connectInMemoryClient();
+      try {
+        const progressMessages: Array<string | undefined> = [];
+        const result: any = await client.callTool(
+          {
+            name: "perplexity_research",
+            arguments: { messages: [{ role: "user", content: "test" }] },
+          },
+          undefined,
+          {
+            onprogress: (p) => {
+              progressMessages.push(p.message);
+            },
+          }
+        );
 
-      const response = await fetch(`http://localhost:${port}/health`);
-      expect(response.ok).toBe(true);
-      
-      const data = await response.json();
-      expect(data.status).toBe("ok");
-      expect(data.service).toBe("perplexity-mcp-server");
+        expect(result.isError).toBeFalsy();
+        expect(progressMessages).toContain("Searching: progress test query");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("should route each tool to its documented preset", async () => {
+      const cases: Array<{ tool: string; preset: string }> = [
+        { tool: "perplexity_ask", preset: ASK_PRESET },
+        { tool: "perplexity_reason", preset: REASON_PRESET },
+        { tool: "perplexity_research", preset: RESEARCH_PRESET },
+      ];
+
+      for (const { tool, preset } of cases) {
+        global.fetch = vi.fn().mockResolvedValue(agentSseResponse("ok"));
+        const { client, server } = await connectInMemoryClient();
+        try {
+          const result: any = await client.callTool({
+            name: tool,
+            arguments: { messages: [{ role: "user", content: "test" }] },
+          });
+          expect(result.isError).toBeFalsy();
+          const upstreamBody = JSON.parse(
+            (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string
+          );
+          expect(upstreamBody.preset).toBe(preset);
+          expect(
+            (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]
+          ).toBe("https://api.perplexity.ai/v1/agent");
+        } finally {
+          await client.close();
+          await server.close();
+        }
+      }
     });
   });
+
 });

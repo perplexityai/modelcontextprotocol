@@ -8,7 +8,7 @@
 &nbsp;
 [![npm version](https://img.shields.io/npm/v/%40perplexity-ai%2Fmcp-server?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@perplexity-ai/mcp-server)
 
-The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through Sonar models and the Search API.
+The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through the [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) and the Search API.
 
 ## Available Tools
 
@@ -16,18 +16,16 @@ The official MCP server implementation for the Perplexity API Platform, providin
 Direct web search using the Perplexity Search API. Returns ranked search results with metadata, perfect for finding current information.
 
 ### **perplexity_ask**
-General-purpose conversational AI with real-time web search using the `sonar-pro` model. Great for quick questions and everyday searches.
+General-purpose conversational AI with real-time web search, backed by the Agent API `fast` preset. Great for quick questions and everyday searches.
 
 ### **perplexity_research**
-Deep, comprehensive research using the `sonar-deep-research` model. Ideal for thorough analysis and detailed reports.
+Deep, comprehensive research backed by the Agent API `high` preset. Ideal for thorough analysis and detailed reports. Runs can take minutes; the server streams the run and reports progress to clients that request it.
 
 ### **perplexity_reason**
-Advanced reasoning and problem-solving using the `sonar-reasoning-pro` model. Perfect for complex analytical tasks.
+Advanced reasoning and problem-solving backed by the Agent API `medium` preset. Perfect for complex analytical tasks.
 
-> [!TIP]
-> Available as an optional parameter for **perplexity_reason** and **perplexity_research**: `strip_thinking`
->
-> Set to `true` to remove `<think>...</think>` tags from the response, saving context tokens. Default: `false`
+> [!NOTE]
+> Presets are managed configurations (model, search setup, step budget) that Perplexity keeps tuned over time; see the [presets guide](https://docs.perplexity.ai/docs/agent-api/presets). Earlier versions of this server called the legacy `sonar-pro`, `sonar-reasoning-pro`, and `sonar-deep-research` models and accepted `strip_thinking` / `reasoning_effort` parameters. Those parameters are no longer part of the tool schemas and are ignored if sent; the Agent API produces no `<think>` tags.
 
 ## Configuration
 
