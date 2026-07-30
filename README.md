@@ -24,7 +24,7 @@ For Claude Code:
 claude mcp add --transport http perplexity https://api.perplexity.ai/mcp --header "Authorization: Bearer YOUR_API_KEY"
 ```
 
-See the [MCP integration docs](https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server) for manual Cursor/VS Code configuration, usage from the Anthropic API, and setup for other clients. The rest of this README covers running the server locally.
+See the [MCP integration docs](https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server) for manual Cursor/VS Code configuration, usage from the Anthropic API, and setup for other clients. Everything from [Configuration](#configuration) down covers running the server locally.
 
 ## Available Tools
 
