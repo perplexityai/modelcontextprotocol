@@ -10,6 +10,15 @@
 
 The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through the [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) and the Search API.
 
+> [!TIP]
+> **No install needed:** Perplexity hosts this server as a remote MCP server at `https://api.perplexity.ai/mcp`. Connect over Streamable HTTP with your Perplexity API key and you get the same four tools with no local process to run or update:
+>
+> ```bash
+> claude mcp add --transport http perplexity https://api.perplexity.ai/mcp --header "Authorization: Bearer YOUR_API_KEY"
+> ```
+>
+> See the [MCP integration docs](https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server) for Cursor, VS Code, the Anthropic API, and other clients.
+
 ## Available Tools
 
 ### **perplexity_search**
@@ -118,7 +127,7 @@ If you'd rather use the standard variables, we support `HTTPS_PROXY` and `HTTP_P
 
 ### HTTP Server Deployment
 
-For cloud or shared deployments, run the server in HTTP mode.
+For cloud or shared deployments, run the server in HTTP mode. (If you just want a managed HTTP endpoint, Perplexity already hosts one at `https://api.perplexity.ai/mcp`; self-host only when you need your own infrastructure, network policies, or configuration.)
 
 #### Environment Variables
 
