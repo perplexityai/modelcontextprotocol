@@ -1,6 +1,6 @@
 # Perplexity API Platform MCP Server
 
-[![Install in Cursor](https://custom-icon-badges.demolab.com/badge/Install_in_Cursor-000000?style=for-the-badge&logo=cursor-ai-white)](https://cursor.com/en/install-mcp?name=perplexity&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBwZXJwbGV4aXR5LWFpL21jcC1zZXJ2ZXIiXSwiZW52Ijp7IlBFUlBMRVhJVFlfQVBJX0tFWSI6IiJ9fQ==)
+[![Install in Cursor](https://custom-icon-badges.demolab.com/badge/Install_in_Cursor-000000?style=for-the-badge&logo=cursor-ai-white)](https://cursor.com/install-mcp?name=perplexity&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBwZXJwbGV4aXR5LWFpL21jcC1zZXJ2ZXIiXSwiZW52Ijp7IlBFUlBMRVhJVFlfQVBJX0tFWSI6IiJ9fQ==)
 &nbsp;
 [![Install in VS Code](https://custom-icon-badges.demolab.com/badge/Install_in_VS_Code-007ACC?style=for-the-badge&logo=vsc&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=perplexity&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22%22%7D%7D)
 &nbsp;
@@ -16,7 +16,7 @@ The official MCP server implementation for the Perplexity API Platform, providin
 &nbsp;
 [![Install in VS Code](https://custom-icon-badges.demolab.com/badge/Install_in_VS_Code-007ACC?style=for-the-badge&logo=vsc&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=perplexity&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fapi.perplexity.ai%2Fmcp%22%2C%22headers%22%3A%7B%22Authorization%22%3A%22Bearer%20%24%7Binput%3Aperplexity-api-key%7D%22%7D%7D&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22perplexity-api-key%22%2C%22description%22%3A%22Perplexity%20API%20Key%22%2C%22password%22%3Atrue%7D%5D)
 
-The remote MCP server is hosted by Perplexity and is the easiest way to get started: same four tools, nothing to install or update. Connect over Streamable HTTP with your Perplexity API key:
+The remote MCP server is hosted by Perplexity and is the easiest way to get started: same four tools, nothing to install or update. If your MCP client does not support remote servers yet, skip to the local setup in [Configuration](#configuration) below. Connect over Streamable HTTP with your Perplexity API key:
 
 ```
 https://api.perplexity.ai/mcp
@@ -28,7 +28,7 @@ For Claude Code:
 claude mcp add --transport http perplexity https://api.perplexity.ai/mcp --header "Authorization: Bearer YOUR_API_KEY"
 ```
 
-See the [MCP integration docs](https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server) for manual Cursor/VS Code configuration, usage from the Anthropic API, and other clients. The rest of this README covers running the server locally.
+See the [MCP integration docs](https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server) for manual Cursor/VS Code configuration, usage from the Anthropic API, and setup for other clients. The rest of this README covers running the server locally.
 
 ## Available Tools
 
