@@ -12,7 +12,7 @@ The official MCP server implementation for the Perplexity API Platform, providin
 
 ## Remote MCP Server
 
-The remote MCP server is hosted by Perplexity and is the easiest way to get started: same tools, nothing to install or update. The Cursor and VS Code buttons at the top of this page connect to it with one click. If your MCP client does not support remote servers yet, skip to the local setup in [Configuration](#configuration) below. Connect over Streamable HTTP with your Perplexity API key:
+The remote MCP server is hosted by Perplexity and is the easiest way to get started: same tools, nothing to install or update. The Cursor and VS Code buttons at the top of this page connect to it with one click. If your MCP client does not support remote servers yet, skip to the [local server](#local-mcp-server) setup below. Connect over Streamable HTTP with your [Perplexity API key](https://www.perplexity.ai/account/api/group):
 
 ```
 https://api.perplexity.ai/mcp
@@ -26,24 +26,7 @@ claude mcp add --transport http perplexity https://api.perplexity.ai/mcp --heade
 
 See the [MCP integration docs](https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server) for manual Cursor/VS Code configuration, usage from the Anthropic API, and setup for other clients.
 
-## Available Tools
-
-### **perplexity_search**
-Direct web search using the Perplexity Search API. Returns ranked search results with metadata, perfect for finding current information. Supports recency filters (`search_recency_filter`) and domain restrictions (`search_domain_filter`).
-
-### **perplexity_ask**
-General-purpose conversational AI with real-time web search, backed by the Agent API `fast` preset. Great for quick questions and everyday searches.
-
-### **perplexity_research**
-Deep, comprehensive research backed by the Agent API `high` preset. Ideal for thorough analysis and detailed reports. Runs can take minutes; the server streams the run and reports progress to clients that request it.
-
-### **perplexity_reason**
-Advanced reasoning and problem-solving backed by the Agent API `medium` preset. Perfect for complex analytical tasks.
-
-> [!NOTE]
-> Presets are managed configurations (model, search setup, step budget) that Perplexity keeps tuned over time; see the [presets guide](https://docs.perplexity.ai/docs/agent-api/presets). Earlier versions of this server called the legacy `sonar-pro`, `sonar-reasoning-pro`, and `sonar-deep-research` models and accepted `strip_thinking` / `reasoning_effort` parameters. Those parameters are no longer part of the tool schemas and are ignored if sent; the Agent API produces no `<think>` tags.
-
-## Configuration
+## Local MCP Server
 
 ### Get Your API Key
 
@@ -73,7 +56,7 @@ claude
 codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
 ```
 
-### Cursor, Claude Desktop, Kiro, Windsurf, and VS Code
+### Other MCP Clients
 
 Most clients can be configured manually using the same `mcpServers` wrapper in their client config (as shown for Cursor). If a client has a different schema, check its docs for the exact wrapper format.
 
@@ -132,7 +115,7 @@ If you'd rather use the standard variables, we support `HTTPS_PROXY` and `HTTP_P
 > The server checks proxy settings in this order: `PERPLEXITY_PROXY` → `HTTPS_PROXY` → `HTTP_PROXY`. If none are set, it connects directly to the internet.
 > URLs must include `https://`. Typical ports are `8080`, `3128`, and `80`.
 
-### HTTP Server Deployment
+### Self-Hosted HTTP Mode
 
 For cloud or shared deployments, run the server in HTTP mode.
 
@@ -162,6 +145,23 @@ npm install && npm run build && npm run start:http
 ```
 
 The server will be accessible at `http://localhost:8080/mcp`
+
+## Available Tools
+
+### **perplexity_search**
+Direct web search using the Perplexity Search API. Returns ranked search results with metadata, perfect for finding current information. Supports recency filters (`search_recency_filter`) and domain restrictions (`search_domain_filter`).
+
+### **perplexity_ask**
+General-purpose conversational AI with real-time web search, backed by the Agent API `fast` preset. Great for quick questions and everyday searches.
+
+### **perplexity_research**
+Deep, comprehensive research backed by the Agent API `high` preset. Ideal for thorough analysis and detailed reports. Runs can take minutes; the server streams the run and reports progress to clients that request it.
+
+### **perplexity_reason**
+Advanced reasoning and problem-solving backed by the Agent API `medium` preset. Perfect for complex analytical tasks.
+
+> [!NOTE]
+> Presets are managed configurations (model, search setup, step budget) that Perplexity keeps tuned over time; see the [presets guide](https://docs.perplexity.ai/docs/agent-api/presets). Earlier versions of this server called the legacy `sonar-pro`, `sonar-reasoning-pro`, and `sonar-deep-research` models and accepted `strip_thinking` / `reasoning_effort` parameters. Those parameters are no longer part of the tool schemas and are ignored if sent; the Agent API produces no `<think>` tags.
 
 ## Use as a Library
 
