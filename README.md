@@ -12,7 +12,7 @@ The official MCP server implementation for the Perplexity API Platform, providin
 
 ## Remote MCP Server
 
-The remote MCP server is hosted by Perplexity and is the easiest way to get started: same tools, nothing to install or update. The Cursor and VS Code buttons at the top of this page connect to it with one click. If your MCP client does not support remote servers yet, skip to the [local server](#local-mcp-server) setup below. Connect over Streamable HTTP with your [Perplexity API key](https://www.perplexity.ai/account/api/group):
+The remote MCP server is hosted by Perplexity and is the easiest way to get started: same tools, nothing to install or update. The Cursor and VS Code buttons at the top of this page connect to it with one click. If your MCP client does not support remote servers yet, skip to the [local server](#local-mcp-server) setup below. Connect over Streamable HTTP with your [Perplexity API key](https://console.perplexity.ai):
 
 ```
 https://api.perplexity.ai/mcp
@@ -30,7 +30,7 @@ See the [MCP integration docs](https://docs.perplexity.ai/docs/getting-started/i
 
 ### Get Your API Key
 
-1. Get your Perplexity API Key from the [API Portal](https://www.perplexity.ai/account/api/group)
+1. Get your Perplexity API Key from the [API Portal](https://console.perplexity.ai)
 2. Replace `your_key_here` in the configurations below with your API key
 3. (Optional) Set timeout: `PERPLEXITY_TIMEOUT_MS=600000` (default: 5 minutes)
 4. (Optional) Set custom base URL: `PERPLEXITY_BASE_URL=https://your-custom-url.com` (default: https://api.perplexity.ai)
