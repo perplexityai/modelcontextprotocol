@@ -138,7 +138,7 @@ If you'd rather use the standard variables, we support `HTTPS_PROXY` and `HTTP_P
 
 ### HTTP Server Deployment
 
-For cloud or shared deployments, run the server in HTTP mode. (If you just want a managed HTTP endpoint, Perplexity already hosts one at `https://api.perplexity.ai/mcp`; self-host only when you need your own infrastructure, network policies, or configuration.)
+For cloud or shared deployments, run the server in HTTP mode.
 
 #### Environment Variables
 
