@@ -12,7 +12,7 @@ The official MCP server implementation for the Perplexity API Platform, providin
 
 ## Remote MCP Server
 
-The remote MCP server is hosted by Perplexity and is the easiest way to get started: same four tools, nothing to install or update. The Cursor and VS Code buttons at the top of this page connect to it with one click. If your MCP client does not support remote servers yet, skip to the local setup in [Configuration](#configuration) below. Connect over Streamable HTTP with your Perplexity API key:
+The remote MCP server is hosted by Perplexity and is the easiest way to get started: same tools, nothing to install or update. The Cursor and VS Code buttons at the top of this page connect to it with one click. If your MCP client does not support remote servers yet, skip to the local setup in [Configuration](#configuration) below. Connect over Streamable HTTP with your Perplexity API key:
 
 ```
 https://api.perplexity.ai/mcp
