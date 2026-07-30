@@ -12,7 +12,7 @@ The official MCP server implementation for the Perplexity API Platform, providin
 
 ## Remote MCP Server
 
-The remote MCP server is hosted by Perplexity and is the easiest way to get started: same tools, nothing to install or update. The Cursor and VS Code buttons at the top of this page connect to it with one click. If your MCP client does not support remote servers yet, skip to the local setup in [Configuration](#configuration) below. Connect over Streamable HTTP with your Perplexity API key:
+The remote MCP server is hosted by Perplexity and is the easiest way to get started: same tools, nothing to install or update. The Cursor and VS Code buttons at the top of this page connect to it with one click. If your MCP client does not support remote servers yet, skip to the [local server](#local-mcp-server) setup below. Connect over Streamable HTTP with your [Perplexity API key](https://www.perplexity.ai/account/api/group):
 
 ```
 https://api.perplexity.ai/mcp
@@ -43,7 +43,7 @@ Advanced reasoning and problem-solving backed by the Agent API `medium` preset. 
 > [!NOTE]
 > Presets are managed configurations (model, search setup, step budget) that Perplexity keeps tuned over time; see the [presets guide](https://docs.perplexity.ai/docs/agent-api/presets). Earlier versions of this server called the legacy `sonar-pro`, `sonar-reasoning-pro`, and `sonar-deep-research` models and accepted `strip_thinking` / `reasoning_effort` parameters. Those parameters are no longer part of the tool schemas and are ignored if sent; the Agent API produces no `<think>` tags.
 
-## Configuration
+## Local MCP Server
 
 ### Get Your API Key
 
