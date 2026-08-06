@@ -1,0 +1,47 @@
+# Auto-merges Dependabot PRs that are PATCH-only updates and pass CI.
+#
+# Minor and major version bumps still require human review (this workflow
+# explicitly exits without merging them).
+#
+# This pairs with .github/dependabot.yml, where:
+#   - production/dev/minor+patch updates are grouped into single weekly PRs
+#   - the modelcontextprotocol group is isolated
+#   - GitHub Actions are also grouped on the same cadence
+#
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    # Use pull_request_target so the workflow runs with repo-scoped GITHUB_TOKEN
+    # permissions on PRs opened by Dependabot.
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge patch-only updates that pass CI
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        # --auto waits for required status checks (set by branch protection)
+        # to pass before merging. If CI fails, the PR stays open for review.
+        run: gh pr merge --auto --squash "$PR_URL"
+
+      - name: Leave minor/major bumps open for review
+        if: steps.meta.outputs.update-type != 'version-update:semver-patch'
+        run: |
+          echo "Update type '${{ steps.meta.outputs.update-type }}' requires human review."
+          echo "Skipping auto-merge."
