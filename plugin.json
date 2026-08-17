@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "perplexity",
+  "version": "1.2.0",
+  "description": "Real-time web search, reasoning, and research through Perplexity's API",
+  "author": { "name": "Perplexity AI", "email": "api@perplexity.ai" },
+  "homepage": "https://docs.perplexity.ai/guides/mcp-server",
+  "repository": "https://github.com/perplexityai/modelcontextprotocol",
+  "license": "MIT",
+  "keywords": ["mcp", "search", "web-search", "perplexity", "research", "reasoning", "ai"]
+}
