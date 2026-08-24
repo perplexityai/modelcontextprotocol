@@ -570,7 +570,18 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
   const searchContextSizeField = z.enum(["low", "medium", "high"]).optional()
     .describe("Controls how much web context is retrieved. 'low' is fastest, 'high' provides more comprehensive results.");
 
-  const responseOutputSchema = {
+  // NOTE: outputSchema is intentionally omitted (was responseOutputSchema).
+  // The MCP SDK's zod-to-json-schema conversion hard-codes draft-07
+  // ($schema: "http://json-schema.org/draft-07/schema#") which is rejected
+  // by 2020-12-only validators (e.g. Claude Cowork/Cowork). See
+  // https://github.com/perplexityai/modelcontextprotocol/issues/132 and
+  // https://github.com/modelcontextprotocol/typescript-sdk/issues/745 /
+  // https://github.com/modelcontextprotocol/typescript-sdk/issues/2084.
+  // outputSchema is optional in the MCP spec; omitting it restores every
+  // affected client immediately without losing runtime behavior (structuredContent
+  // is still returned). Re-add when the SDK emits 2020-12 by default.
+  // Keeping the shape for reference:
+  const _responseOutputSchema = {
     response: z.string().describe("AI-generated text response with numbered citation references"),
   };
 
@@ -596,7 +607,6 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         "For in-depth multi-source research, use perplexity_research instead. " +
         "For step-by-step reasoning and analysis, use perplexity_reason instead.",
       inputSchema: askAndReasonInputSchema as any,
-      outputSchema: responseOutputSchema as any,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -643,7 +653,6 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         "For quick factual questions, use perplexity_ask instead. " +
         "For logical analysis and reasoning, use perplexity_reason instead.",
       inputSchema: researchInputSchema as any,
-      outputSchema: responseOutputSchema as any,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -680,7 +689,6 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         "For quick factual questions, use perplexity_ask instead. " +
         "For comprehensive multi-source research, use perplexity_research instead.",
       inputSchema: askAndReasonInputSchema as any,
-      outputSchema: responseOutputSchema as any,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -728,7 +736,8 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
     search_domain_filter: searchDomainFilterField,
   };
 
-  const searchOutputSchema = {
+  // Same draft-07 note as above — search outputSchema omitted for 2020-12 compatibility.
+  const _searchOutputSchema = {
     results: z.string().describe("Formatted search results, each with title, URL, snippet, and date"),
   };
 
@@ -742,7 +751,6 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         "Supports recency filters and domain restrictions. " +
         "For AI-generated answers with citations, use perplexity_ask instead.",
       inputSchema: searchInputSchema as any,
-      outputSchema: searchOutputSchema as any,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -774,6 +782,50 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       };
     }
   );
+
+  // ---------------------------------------------------------------------------
+  // 2020-12 compatibility: the SDK's zod-to-json-schema conversion hard-codes
+  // draft-07 ($schema: "http://json-schema.org/draft-07/schema#").  2020-12-only
+  // validators (Ajv configured for 2020-12, Claude Cowork, etc.) reject the
+  // tools as "unsupported dialect" — see
+  // https://github.com/perplexityai/modelcontextprotocol/issues/132 and
+  // https://github.com/modelcontextprotocol/typescript-sdk/issues/2084.
+  // outputSchema is omitted entirely above; for inputSchema we strip $schema
+  // at the ListTools boundary so clients apply their own default dialect.
+  // This is safe because the emitted schemas use only keywords with identical
+  // semantics under draft-07 and 2020-12.
+  // ---------------------------------------------------------------------------
+  const stripSchemaDialect = (schema: unknown): unknown => {
+    if (schema && typeof schema === "object" && "$schema" in (schema as Record<string, unknown>)) {
+      const { $schema: _omit, ...rest } = schema as Record<string, unknown>;
+      return rest;
+    }
+    return schema;
+  };
+
+  try {
+    const protocol = server.server as unknown as {
+      _requestHandlers?: Map<string, (req: unknown, extra: unknown) => Promise<unknown>>;
+    };
+    const handlers = protocol._requestHandlers;
+    const original = handlers?.get("tools/list");
+    if (original && handlers) {
+      handlers.set("tools/list", async (req: unknown, extra: unknown) => {
+        const result = (await (original as (r: unknown, e: unknown) => Promise<unknown>)(req, extra)) as {
+          tools?: Array<Record<string, unknown>>;
+        };
+        if (result?.tools) {
+          for (const tool of result.tools) {
+            if (tool.inputSchema) tool.inputSchema = stripSchemaDialect(tool.inputSchema) as Record<string, unknown>;
+            if (tool.outputSchema) tool.outputSchema = stripSchemaDialect(tool.outputSchema) as Record<string, unknown>;
+          }
+        }
+        return result;
+      });
+    }
+  } catch {
+    // Non-fatal: if internal handler shape changes, tools still work with draft-07.
+  }
 
   return server.server;
 }
