@@ -1,4 +1,4 @@
-import type { ProxyAgent } from "undici";
+import type { Dispatcher } from "undici";
 
 export interface Message {
   role: string;
@@ -122,5 +122,5 @@ export interface AgentCallHooks {
 
 export interface UndiciRequestOptions {
   [key: string]: unknown;
-  dispatcher?: ProxyAgent;
+  dispatcher?: Dispatcher;
 }
