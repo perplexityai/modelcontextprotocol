@@ -107,6 +107,30 @@ describe("HTTP transport configuration", () => {
       );
     });
 
+    it("allows the mcp-protocol-version request header in preflight", async () => {
+      await start({ allowedOrigins: ["https://app.example"] });
+
+      // The official StreamableHTTPClientTransport sends mcp-protocol-version
+      // on every request after initialize, so browser preflights ask for it.
+      const preflight = await fetch(`${baseUrl}/mcp`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://app.example",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers":
+            "content-type,mcp-session-id,mcp-protocol-version",
+        },
+      });
+
+      expect(preflight.headers.get("access-control-allow-origin")).toBe(
+        "https://app.example",
+      );
+      const allowHeaders = (
+        preflight.headers.get("access-control-allow-headers") ?? ""
+      ).toLowerCase();
+      expect(allowHeaders).toContain("mcp-protocol-version");
+    });
+
     it("does not allow a non-allowlisted origin even when others are allowlisted", async () => {
       await start({ allowedOrigins: ["https://app.example"] });
 
