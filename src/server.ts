@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { fetch as undiciFetch, ProxyAgent } from "undici";
+import { fetch as undiciFetch, Agent, ProxyAgent } from "undici";
+import type { Dispatcher } from "undici";
 import type {
   Message,
   AgentResponse,
@@ -34,14 +35,13 @@ export function getProxyUrl(): string | undefined {
          undefined;
 }
 
-export async function proxyAwareFetch(url: string, options: RequestInit = {}): Promise<Response> {
+export async function proxyAwareFetch(url: string, options: RequestInit & { dispatcher?: Dispatcher } = {}): Promise<Response> {
   const proxyUrl = getProxyUrl();
 
   if (proxyUrl) {
-    const proxyAgent = new ProxyAgent(proxyUrl);
     const undiciOptions: UndiciRequestOptions = {
       ...options,
-      dispatcher: proxyAgent,
+      dispatcher: options.dispatcher ?? new ProxyAgent(proxyUrl),
     };
     const response = await undiciFetch(url, undiciOptions);
     return response as unknown as Response;
@@ -75,6 +75,7 @@ async function makeApiRequest(
   serviceOrigin: string | undefined,
   signal?: AbortSignal,
   apiKey?: ApiKeyProvider,
+  dispatcher?: Dispatcher,
 ): Promise<Response> {
   // A configured provider fully replaces the env var: falling back would let
   // a multi-tenant misconfiguration silently bill the process-wide key.
@@ -123,6 +124,7 @@ async function makeApiRequest(
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
+      ...(dispatcher && { dispatcher }),
     });
   } catch (error) {
     clearTimeout(timeoutId);
@@ -292,7 +294,8 @@ export async function consumeAgentStream(
       }
       throw error;
     }
-    throw new Error(`Network error while streaming from Perplexity API: ${error}`);
+    const code = transportCauseCode(error);
+    throw new Error(`Network error while streaming from Perplexity API: ${error}${code ? ` (${code})` : ""}`);
   }
 
   if (hooks?.signal?.aborted) {
@@ -315,6 +318,25 @@ export async function consumeAgentStream(
   } catch (error) {
     throw new Error(`Invalid response from Perplexity Agent API: ${error}`);
   }
+}
+
+const TRANSPORT_CAUSE_CODE = /^UND_ERR_[A-Z_]+$/;
+function transportCauseCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("cause" in error)) return undefined;
+  const cause = error.cause;
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) return undefined;
+  const code = cause.code;
+  return typeof code === "string" && TRANSPORT_CAUSE_CODE.test(code) ? code : undefined;
+}
+
+function createAgentDispatcher(timeoutMs: number): Dispatcher {
+  // Undici defaults both transport timers to 300 seconds; align them with the
+  // application deadline so a lower-level timer cannot end a valid stream.
+  const limit = Number.isInteger(timeoutMs) && timeoutMs > 0 ? timeoutMs : 0;
+  const proxyUrl = getProxyUrl();
+  return proxyUrl
+    ? new ProxyAgent({ uri: proxyUrl, headersTimeout: limit, bodyTimeout: limit })
+    : new Agent({ headersTimeout: limit, bodyTimeout: limit });
 }
 
 export function extractAgentText(response: AgentResponse): string {
@@ -427,6 +449,7 @@ export async function performAgentResponse(
   // streamed responses return headers immediately, so a headers-only timeout
   // would never fire.
   const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+  const dispatcher = createAgentDispatcher(TIMEOUT_MS);
   const deadline = new AbortController();
   const timeoutId = setTimeout(() => deadline.abort(), TIMEOUT_MS);
   const abortDeadline = () => deadline.abort();
@@ -439,7 +462,7 @@ export async function performAgentResponse(
   }
 
   try {
-    const response = await makeApiRequest("v1/agent", body, serviceOrigin, deadline.signal, apiKey);
+    const response = await makeApiRequest("v1/agent", body, serviceOrigin, deadline.signal, apiKey, dispatcher);
     const agentResponse = await consumeAgentStream(response, hooks, serviceOrigin, deadline.signal, apiKey);
     return formatAgentResponseText(agentResponse);
   } catch (error) {
@@ -453,6 +476,7 @@ export async function performAgentResponse(
   } finally {
     clearTimeout(timeoutId);
     hooks?.signal?.removeEventListener("abort", abortDeadline);
+    await dispatcher.destroy();
   }
 }
 
