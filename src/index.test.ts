@@ -119,7 +119,7 @@ describe("Perplexity MCP Server", () => {
 
       const result = await performAgentResponse(TEST_MESSAGES, "fast");
 
-      expect(result).toBe("This is a test response");
+      expect(result.textWithCitationsFooter).toBe("This is a test response");
       expect(global.fetch).toHaveBeenCalledWith(
         AGENT_URL,
         expect.objectContaining({
@@ -157,8 +157,8 @@ describe("Perplexity MCP Server", () => {
 
       const result = await performAgentResponse(TEST_MESSAGES, "fast");
 
-      expect(result).toContain("Answer citing sources[3][1].");
-      expect(result).toContain(
+      expect(result.textWithCitationsFooter).toContain("Answer citing sources[3][1].");
+      expect(result.textWithCitationsFooter).toContain(
         "\n\nCitations:\n[1] https://example.com/first\n[2] https://example.com/second\n[3] https://example.com/third\n"
       );
     });
@@ -232,7 +232,7 @@ describe("Perplexity MCP Server", () => {
         { onProgress: (update) => updates.push(update) }
       );
 
-      expect(result).toBe("done");
+      expect(result.textWithCitationsFooter).toBe("done");
       expect(updates.map((u) => u.message)).toEqual([
         "Searching: battery production | solid state timeline",
         "Reading 2 search results",
@@ -444,7 +444,7 @@ describe("Perplexity MCP Server", () => {
 
       const result = await performAgentResponse(TEST_MESSAGES, "fast");
 
-      expect(result).toBe("late close");
+      expect(result.textWithCitationsFooter).toBe("late close");
       expect(cancelCalls).toEqual([]);
     });
 
@@ -504,8 +504,8 @@ describe("Perplexity MCP Server", () => {
 
       const result = await performAgentResponse(TEST_MESSAGES, "fast");
 
-      expect(result).toContain("Answer.");
-      expect(result).toContain("[2] https://example.com/real");
+      expect(result.textWithCitationsFooter).toContain("Answer.");
+      expect(result.textWithCitationsFooter).toContain("[2] https://example.com/real");
     });
 
     it("should wrap schema errors from a malformed completed response", async () => {
@@ -557,7 +557,7 @@ describe("Perplexity MCP Server", () => {
         .mockResolvedValue({ ok: true, body: stream } as unknown as Response);
 
       const result = await performAgentResponse(TEST_MESSAGES, "fast");
-      expect(result).toBe("recovered");
+      expect(result.textWithCitationsFooter).toBe("recovered");
     });
 
     it("should decode multi-byte characters split across stream chunks", async () => {
@@ -577,7 +577,7 @@ describe("Perplexity MCP Server", () => {
 
       const result = await performAgentResponse(TEST_MESSAGES, "fast");
 
-      expect(result).toBe("Response with émojis 🎉 and unicode ñ");
+      expect(result.textWithCitationsFooter).toBe("Response with émojis 🎉 and unicode ñ");
     });
 
     it("should pass through multi-turn conversations", async () => {
@@ -621,8 +621,8 @@ describe("Perplexity MCP Server", () => {
 
       const result = await performSearch("test query", 10, 1024);
 
-      expect(result).toContain("Found 1 search results");
-      expect(result).toContain("Search Result");
+      expect(result.text).toContain("Found 1 search results");
+      expect(result.text).toContain("Search Result");
       expect(global.fetch).toHaveBeenCalledWith(
         SEARCH_URL,
         expect.objectContaining({
