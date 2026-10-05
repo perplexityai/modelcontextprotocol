@@ -167,6 +167,56 @@ Advanced reasoning and problem-solving backed by the Agent API `medium` preset. 
 > [!NOTE]
 > Presets are managed configurations (model, search setup, step budget) that Perplexity keeps tuned over time; see the [presets guide](https://docs.perplexity.ai/docs/agent-api/presets). Earlier versions of this server called the legacy `sonar-pro`, `sonar-reasoning-pro`, and `sonar-deep-research` models and accepted `strip_thinking` / `reasoning_effort` parameters. Those parameters are no longer part of the tool schemas and are ignored if sent; the Agent API produces no `<think>` tags.
 
+## Granular Citations
+
+By default, tool results are plain text and include no `citations` array. `perplexity_ask`, `perplexity_research`, and `perplexity_reason` leave the answer body unchanged, including inline markers such as `[1]`, and append a footer:
+
+```text
+Citations:
+[1] https://example.com/source
+```
+
+Each footer line uses the search result's numeric id. When those ids are missing, or the same id maps to more than one URL, the footer lists unique URLs with positional numbers instead. `perplexity_search` returns a numbered list of titles, URLs, snippets, and dates, with no footer.
+
+Clients that want those sources as structured metadata, rather than only in that text, can opt in to the draft [SEP-3094 granular citations format](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3094). All four tools support it. A client opts in on each `tools/call` request through:
+
+```json
+{
+  "_meta": {
+    "io.modelcontextprotocol/clientCapabilities": {
+      "citations": {
+        "render": {}
+      }
+    }
+  }
+}
+```
+
+When `citations` is declared, the tool result includes a top-level `citations` array with source titles, URLs, excerpts, and publication dates when available. Agent tools bind stable numeric source markers such as `[2]` to citation `id: "2"`. Search results use block-level citations.
+
+When `citations.render` is declared, agent tools omit the legacy `Citations:` footer because the client can render citation chips or links. Clients that do not opt in continue receiving the existing text format.
+
+A `perplexity_ask` result for a client that declared `citations.render` looks like this. `content` is the answer without the footer, and `citations` carries the source for `[1]`:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Supported claim[1]."
+    }
+  ],
+  "citations": [
+    {
+      "id": "1",
+      "name": "Source",
+      "url": "https://example.com/source#:~:text=Supporting%20passage",
+      "text": "Supporting passage"
+    }
+  ]
+}
+```
+
 ## Use as a Library
 
 The package also exports the server factory for embedding in your own Node process:
