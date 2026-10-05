@@ -394,3 +394,179 @@ describe("createPerplexityServer tools/list schemas", () => {
     await server.close();
   });
 });
+
+describe("createPerplexityServer SEP-3094 tool results", () => {
+  it("replaces the legacy footer when the client renders agent citations", async () => {
+    const originalFetch = global.fetch;
+    const completed = {
+      type: "response.completed",
+      response: {
+        id: "resp_test",
+        status: "completed",
+        model: "test",
+        output: [
+          {
+            type: "search_results",
+            results: [
+              {
+                id: 1,
+                title: "Source",
+                url: "https://example.com/source",
+                snippet: "Supporting passage",
+              },
+            ],
+          },
+          {
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: "Supported claim[1].",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        `event: response.completed\ndata: ${JSON.stringify(completed)}\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ),
+    );
+
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+    const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+    const { createPerplexityServer } = await import("./server.js");
+    const server = createPerplexityServer(undefined, {
+      apiKey: () => "pplx-test",
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test", version: "0.0.0" });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const result = await client.callTool({
+        name: "perplexity_ask",
+        arguments: {
+          messages: [{ role: "user", content: "Question" }],
+        },
+        _meta: {
+          "io.modelcontextprotocol/clientCapabilities": {
+            citations: { render: {} },
+          },
+        },
+      });
+
+      expect(result.content).toEqual([
+        { type: "text", text: "Supported claim[1]." },
+      ]);
+      expect(JSON.stringify(result.content)).not.toContain("Citations:");
+      expect((result as unknown as { citations?: unknown[] }).citations).toEqual([
+        {
+          id: "1",
+          name: "Source",
+          url:
+            "https://example.com/source#:~:text=Supporting%20passage",
+          text: "Supporting passage",
+        },
+      ]);
+    } finally {
+      global.fetch = originalFetch;
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("returns top-level citations when the client advertises support", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            title: "Source",
+            url: "https://example.com/source",
+            snippet: "Supporting passage",
+            date: "2026-09-23",
+          },
+        ],
+      }),
+    } as Response);
+
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+    const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+    const { createPerplexityServer } = await import("./server.js");
+    const server = createPerplexityServer(undefined, {
+      apiKey: () => "pplx-test",
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test", version: "0.0.0" });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const result = await client.callTool({
+        name: "perplexity_search",
+        arguments: { query: "test" },
+        _meta: {
+          "io.modelcontextprotocol/clientCapabilities": {
+            citations: { render: {} },
+          },
+        },
+      });
+
+      expect((result as unknown as { citations?: unknown[] }).citations).toEqual([
+        {
+          name: "Source",
+          url:
+            "https://example.com/source#:~:text=Supporting%20passage",
+          text: "Supporting passage",
+          datePublished: "2026-09-23",
+        },
+      ]);
+    } finally {
+      global.fetch = originalFetch;
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("omits citations for clients that do not advertise support", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          { title: "Source", url: "https://example.com/source" },
+        ],
+      }),
+    } as Response);
+
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+    const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+    const { createPerplexityServer } = await import("./server.js");
+    const server = createPerplexityServer(undefined, {
+      apiKey: () => "pplx-test",
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test", version: "0.0.0" });
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const result = await client.callTool({
+        name: "perplexity_search",
+        arguments: { query: "test" },
+      });
+
+      expect((result as unknown as { citations?: unknown[] }).citations).toBeUndefined();
+    } finally {
+      global.fetch = originalFetch;
+      await client.close();
+      await server.close();
+    }
+  });
+});
