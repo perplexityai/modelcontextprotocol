@@ -1,0 +1,69 @@
+# Dependabot configuration for @perplexity-ai/mcp-server
+#
+# Goals:
+#   1. Burn down the backlog of open Dependabot alerts (currently 6 high /
+#      16 moderate / 1 low at time of writing) without drowning maintainers
+#      in tiny one-dep-at-a-time PRs.
+#   2. Keep patch-level updates flowing automatically via the auto-merge
+#      workflow at .github/workflows/dependabot-automerge.yml, while still
+#      requiring human review for minor and major version bumps.
+#   3. Update GitHub Actions on the same cadence so workflow runners don't
+#      silently age out.
+#
+# References:
+#   - https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    groups:
+      # All non-major production updates land in a single weekly PR.
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      # All non-major dev updates land in a single weekly PR.
+      development-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      # MCP SDK churns a lot — keep it isolated so SDK bumps don't get
+      # bundled with unrelated transitive upgrades.
+      modelcontextprotocol:
+        patterns:
+          - "@modelcontextprotocol/*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
