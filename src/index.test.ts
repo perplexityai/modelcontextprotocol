@@ -603,6 +603,47 @@ describe("Perplexity MCP Server", () => {
   });
 
   describe("performSearch", () => {
+    it("should accept nullable dates and preserve last_updated through parsing", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: "search_dates",
+          results: [
+            { title: "Updated", url: "https://example.com/updated", snippet: "text",
+              date: null, last_updated: "2026-10-12" },
+            { title: "Published", url: "https://example.com/published", snippet: "text",
+              date: "2026-10-11", last_updated: null },
+            { title: "Undated", url: "https://example.com/undated", snippet: "text" },
+            { title: "Unknown", url: "https://example.com/unknown", snippet: "text",
+              date: null, last_updated: null },
+          ],
+        }),
+      } as Response);
+
+      const result = await performSearch("test dates");
+
+      expect(result).toContain("Found 4 search results");
+      expect(result).toContain("Last updated: 2026-10-12");
+      expect(result).toContain("Date: 2026-10-11");
+      expect(result.match(/Date:/g)).toHaveLength(1);
+      expect(result.match(/Last updated:/g)).toHaveLength(1);
+      expect(result).not.toContain("null");
+      expect(result).not.toContain("undefined");
+    });
+
+    it.each(["date", "last_updated"])("should reject non-string %s values", async (field) => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [{ title: "Invalid", url: "https://example.com", snippet: "text", [field]: 123 }],
+        }),
+      } as Response);
+
+      await expect(performSearch("invalid dates")).rejects.toThrow(
+        "Failed to parse JSON response from Perplexity Search API"
+      );
+    });
+
     it("should successfully perform search", async () => {
       const mockResponse = {
         results: [
