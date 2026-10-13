@@ -184,9 +184,47 @@ describe("Perplexity MCP Server", () => {
             search_recency_filter: "week",
             search_domain_filter: ["wikipedia.org", "-reddit.com"],
           },
-          search_context_size: "high",
+          max_tokens: 8000,
+          max_tokens_per_page: 2048,
         },
       ]);
+    });
+
+    it.each([
+      ["low", 2000, 512],
+      ["medium", 4000, 1024],
+      ["high", 8000, 2048],
+    ] as const)("should translate legacy %s into local token budgets", async (size, total, perPage) => {
+      global.fetch = vi.fn().mockResolvedValue(sseResponse([completedEvent("ok")]));
+      await performAgentResponse(TEST_MESSAGES, "medium", undefined, { search_context_size: size });
+      const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+      expect(body.tools).toEqual([{ type: "web_search", max_tokens: total, max_tokens_per_page: perPage }]);
+      expect(body.tools[0]).not.toHaveProperty("search_context_size");
+    });
+
+    it.each([
+      [{ max_tokens: 6000 }, { max_tokens: 6000, max_tokens_per_page: 2048 }],
+      [{ max_tokens_per_page: 1200 }, { max_tokens: 8000, max_tokens_per_page: 1200 }],
+      [{ max_tokens: 6000, max_tokens_per_page: 1200 }, { max_tokens: 6000, max_tokens_per_page: 1200 }],
+    ])("should prefer explicit budgets independently over legacy defaults", async (explicit, expected) => {
+      global.fetch = vi.fn().mockResolvedValue(sseResponse([completedEvent("ok")]));
+      await performAgentResponse(TEST_MESSAGES, "medium", undefined, { search_context_size: "high", ...explicit });
+      const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+      expect(body.tools).toEqual([{ type: "web_search", ...expected }]);
+    });
+
+    it("should send only the supplied explicit budget without a legacy size", async () => {
+      global.fetch = vi.fn().mockResolvedValue(sseResponse([completedEvent("ok")]));
+      await performAgentResponse(TEST_MESSAGES, "fast", undefined, { max_tokens: 6000 });
+      const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+      expect(body.tools).toEqual([{ type: "web_search", max_tokens: 6000 }]);
+    });
+
+    it("should omit the tools override for empty options", async () => {
+      global.fetch = vi.fn().mockResolvedValue(sseResponse([completedEvent("ok")]));
+      await performAgentResponse(TEST_MESSAGES, "medium", undefined, {});
+      const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+      expect(body.tools).toBeUndefined();
     });
 
     it("should omit the tools override when no search options are set", async () => {

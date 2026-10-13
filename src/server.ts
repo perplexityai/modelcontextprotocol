@@ -387,6 +387,15 @@ export function formatAgentResponseText(response: AgentResponse): string {
 
 function buildWebSearchTool(options?: AgentToolOptions): Record<string, unknown> | undefined {
   if (!options) return undefined;
+  // Local compatibility policy, not an upstream equivalence to Sonar's sizes.
+  // Explicit budgets override either legacy default independently.
+  const legacyBudgets = options.search_context_size && {
+    low: { max_tokens: 2000, max_tokens_per_page: 512 },
+    medium: { max_tokens: 4000, max_tokens_per_page: 1024 },
+    high: { max_tokens: 8000, max_tokens_per_page: 2048 },
+  }[options.search_context_size];
+  const maxTokens = options.max_tokens ?? (legacyBudgets && legacyBudgets.max_tokens);
+  const maxTokensPerPage = options.max_tokens_per_page ?? (legacyBudgets && legacyBudgets.max_tokens_per_page);
   const filters: Record<string, unknown> = {
     ...(options.search_recency_filter && { search_recency_filter: options.search_recency_filter }),
     ...(options.search_domain_filter && { search_domain_filter: options.search_domain_filter }),
@@ -394,7 +403,8 @@ function buildWebSearchTool(options?: AgentToolOptions): Record<string, unknown>
   const tool: Record<string, unknown> = {
     type: "web_search",
     ...(Object.keys(filters).length > 0 && { filters }),
-    ...(options.search_context_size && { search_context_size: options.search_context_size }),
+    ...(maxTokens !== undefined && { max_tokens: maxTokens }),
+    ...(maxTokensPerPage !== undefined && { max_tokens_per_page: maxTokensPerPage }),
   };
   // No override means the preset's own web_search config stays in effect.
   return Object.keys(tool).length > 1 ? tool : undefined;
@@ -554,9 +564,9 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       instructions:
         "Perplexity AI server for web-grounded search, research, and reasoning, backed by the Perplexity Agent API. " +
         "Use perplexity_search for finding URLs, facts, and recent news. Supports recency filters, domain restrictions, and fast search. " +
-        "Use perplexity_ask for quick AI-answered questions with citations. Supports recency filters, domain restrictions, and search context size control. " +
+        "Use perplexity_ask for quick AI-answered questions with citations. Supports recency filters, domain restrictions, and search token budgets. " +
         "Use perplexity_research for in-depth multi-source investigation (slow, can take minutes). " +
-        "Use perplexity_reason for complex analysis requiring step-by-step logic. Supports recency filters, domain restrictions, and search context size control. " +
+        "Use perplexity_reason for complex analysis requiring step-by-step logic. Supports recency filters, domain restrictions, and search token budgets. " +
         "All tools are read-only and access live web data.",
     }
   );
@@ -575,7 +585,11 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
     .describe("Restrict search results to specific domains (e.g., ['wikipedia.org', 'arxiv.org']). Use '-' prefix for exclusion (e.g., ['-reddit.com']).");
 
   const searchContextSizeField = z.enum(["low", "medium", "high"]).optional()
-    .describe("Controls how much web context is retrieved. 'low' is fastest, 'high' provides more comprehensive results.");
+    .describe("Deprecated compatibility shorthand for search token budgets: low=2000/512, medium=4000/1024, high=8000/2048 (total/per-page). Explicit max_tokens and max_tokens_per_page override these defaults.");
+  const maxTokensField = z.number().int().positive().optional()
+    .describe("Maximum total search-context tokens, not generated answer tokens. Overrides the legacy search_context_size total budget.");
+  const maxTokensPerPageField = z.number().int().positive().optional()
+    .describe("Maximum search-context tokens extracted per result page. Overrides the legacy search_context_size per-page budget.");
 
   const responseOutputSchema = {
     response: z.string().describe("AI-generated text response with numbered citation references"),
@@ -587,6 +601,8 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
     search_recency_filter: searchRecencyFilterField,
     search_domain_filter: searchDomainFilterField,
     search_context_size: searchContextSizeField,
+    max_tokens: maxTokensField,
+    max_tokens_per_page: maxTokensPerPageField,
   };
   const researchInputSchema = {
     messages: messagesField,
@@ -599,7 +615,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       description: "Answer a question using web-grounded AI (Perplexity Agent API, " + ASK_PRESET + " preset). " +
         "Best for: quick factual questions, summaries, explanations, and general Q&A. " +
         "Returns a text response with numbered citations. Fastest and cheapest option. " +
-        "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search context size. " +
+        "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search token budgets. " +
         "For in-depth multi-source research, use perplexity_research instead. " +
         "For step-by-step reasoning and analysis, use perplexity_reason instead.",
       inputSchema: askAndReasonInputSchema as any,
@@ -612,17 +628,21 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       },
     },
     async (args: any, extra: any) => {
-      const { messages, search_recency_filter, search_domain_filter, search_context_size } = args as {
+      const { messages, search_recency_filter, search_domain_filter, search_context_size, max_tokens, max_tokens_per_page } = args as {
         messages: Message[];
         search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
         search_domain_filter?: string[];
         search_context_size?: "low" | "medium" | "high";
+        max_tokens?: number;
+        max_tokens_per_page?: number;
       };
       validateMessages(messages, "perplexity_ask");
       const options = {
         ...(search_recency_filter && { search_recency_filter }),
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
+        ...(max_tokens !== undefined && { max_tokens }),
+        ...(max_tokens_per_page !== undefined && { max_tokens_per_page }),
       };
       const result = await performAgentResponse(
         messages,
@@ -683,7 +703,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       description: "Analyze a question using step-by-step reasoning with web grounding (Perplexity Agent API, " + REASON_PRESET + " preset). " +
         "Best for: math, logic, comparisons, complex arguments, and tasks requiring chain-of-thought. " +
         "Returns a reasoned response with numbered citations. " +
-        "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search context size. " +
+        "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search token budgets. " +
         "For quick factual questions, use perplexity_ask instead. " +
         "For comprehensive multi-source research, use perplexity_research instead.",
       inputSchema: askAndReasonInputSchema as any,
@@ -696,17 +716,21 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       },
     },
     async (args: any, extra: any) => {
-      const { messages, search_recency_filter, search_domain_filter, search_context_size } = args as {
+      const { messages, search_recency_filter, search_domain_filter, search_context_size, max_tokens, max_tokens_per_page } = args as {
         messages: Message[];
         search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
         search_domain_filter?: string[];
         search_context_size?: "low" | "medium" | "high";
+        max_tokens?: number;
+        max_tokens_per_page?: number;
       };
       validateMessages(messages, "perplexity_reason");
       const options = {
         ...(search_recency_filter && { search_recency_filter }),
         ...(search_domain_filter && { search_domain_filter }),
         ...(search_context_size && { search_context_size }),
+        ...(max_tokens !== undefined && { max_tokens }),
+        ...(max_tokens_per_page !== undefined && { max_tokens_per_page }),
       };
       const result = await performAgentResponse(
         messages,
