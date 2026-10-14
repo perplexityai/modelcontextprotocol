@@ -364,7 +364,7 @@ describe("Transport Integration Tests", () => {
       }
     );
 
-    it.each([0, -1, 1.5, 2_147_483_648])("should reject invalid search budgets %s before calling the API", async (value) => {
+    it.each([0, -1, 1.5, 1_000_001])("should reject invalid search budgets %s before calling the API", async (value) => {
       global.fetch = vi.fn();
       const { client, server } = await connectInMemoryClient();
       try {
