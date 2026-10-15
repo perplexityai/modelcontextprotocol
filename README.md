@@ -167,7 +167,7 @@ Deep, comprehensive research backed by the Agent API `high` preset. Ideal for th
 ### **perplexity_reason**
 Advanced reasoning and problem-solving backed by the Agent API `medium` preset. Perfect for complex analytical tasks.
 
-`perplexity_ask` and `perplexity_reason` accept optional positive-integer `max_tokens` (total search context) and `max_tokens_per_page` (context per result page). These budgets control retrieved search content, not generated answer length. When omitted, the preset's search configuration remains in effect.
+`perplexity_ask` and `perplexity_reason` accept optional positive-integer `max_tokens` (total search context, up to 120,000) and `max_tokens_per_page` (context per result page, up to 20,000). These Agent API budgets control retrieved search content, not generated answer length. When omitted, the preset's search configuration remains in effect.
 
 The legacy `search_context_size` argument is still accepted, but is translated locally into explicit budgets rather than sent to the Agent API:
 

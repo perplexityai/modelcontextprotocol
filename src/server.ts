@@ -586,11 +586,11 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
 
   const searchContextSizeField = z.enum(["low", "medium", "high"]).optional()
     .describe("Deprecated compatibility shorthand for search token budgets: low=2000/512, medium=4000/1024, high=8000/2048 (total/per-page). Explicit max_tokens and max_tokens_per_page override these defaults.");
-  // Match the Search API's documented 1..1,000,000 token budget range.
-  const MAX_SEARCH_TOKENS = 1_000_000;
+  const MAX_SEARCH_TOKENS = 120_000;
+  const MAX_SEARCH_TOKENS_PER_PAGE = 20_000;
   const maxTokensField = z.number().int().positive().max(MAX_SEARCH_TOKENS).optional()
     .describe("Maximum total search-context tokens, not generated answer tokens. Overrides the legacy search_context_size total budget.");
-  const maxTokensPerPageField = z.number().int().positive().max(MAX_SEARCH_TOKENS).optional()
+  const maxTokensPerPageField = z.number().int().positive().max(MAX_SEARCH_TOKENS_PER_PAGE).optional()
     .describe("Maximum search-context tokens extracted per result page. Overrides the legacy search_context_size per-page budget.");
 
   const responseOutputSchema = {

@@ -364,22 +364,42 @@ describe("Transport Integration Tests", () => {
       }
     );
 
-    it("should accept search budgets at the 1,000,000 cap", async () => {
+    it.each(["perplexity_ask", "perplexity_reason"])("should accept Agent search budgets at their caps on %s", async (tool) => {
       global.fetch = vi.fn().mockResolvedValue(agentSseResponse("ok"));
       const { client, server } = await connectInMemoryClient();
       try {
         const result = await client.callTool({
-          name: "perplexity_ask",
-          arguments: { messages: [{ role: "user", content: "test" }], max_tokens: 1_000_000, max_tokens_per_page: 1_000_000 },
+          name: tool,
+          arguments: { messages: [{ role: "user", content: "test" }], max_tokens: 120_000, max_tokens_per_page: 20_000 },
         });
         expect(result.isError).toBeFalsy();
         const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
-        expect(body.tools).toEqual([{ type: "web_search", max_tokens: 1_000_000, max_tokens_per_page: 1_000_000 }]);
+        expect(body.tools).toEqual([{ type: "web_search", max_tokens: 120_000, max_tokens_per_page: 20_000 }]);
       } finally {
         await client.close();
         await server.close();
       }
     });
+
+    it.each([["max_tokens", 120_001], ["max_tokens_per_page", 20_001]] as const)(
+      "should reject Agent %s above its cap before calling the API", async (field, value) => {
+        global.fetch = vi.fn().mockResolvedValue(agentSseResponse("ok"));
+        const { client, server } = await connectInMemoryClient();
+        try {
+          for (const tool of ["perplexity_ask", "perplexity_reason"]) {
+            const result = await client.callTool({
+              name: tool,
+              arguments: { messages: [{ role: "user", content: "test" }], [field]: value },
+            });
+            expect(result.isError).toBe(true);
+          }
+          expect(global.fetch).not.toHaveBeenCalled();
+        } finally {
+          await client.close();
+          await server.close();
+        }
+      }
+    );
 
     it.each([0, -1, 1.5, 1_000_001])("should reject invalid search budgets %s before calling the API", async (value) => {
       global.fetch = vi.fn();
