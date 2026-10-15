@@ -55,7 +55,8 @@ export const SearchResultSchema = z.object({
   title: z.string(),
   url: z.string(),
   snippet: z.string().optional(),
-  date: z.string().optional(),
+  date: z.string().nullish(),
+  last_updated: z.string().nullish(),
   score: z.number().optional(),
 });
 

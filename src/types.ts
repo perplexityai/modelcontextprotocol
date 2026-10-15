@@ -65,7 +65,8 @@ export interface SearchResult {
   title: string;
   url: string;
   snippet?: string;
-  date?: string;
+  date?: string | null;
+  last_updated?: string | null;
   score?: number;
 }
 

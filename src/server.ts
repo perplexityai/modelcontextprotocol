@@ -472,6 +472,9 @@ export function formatSearchResults(data: SearchResponse): string {
     if (result.date) {
       formattedResults += `   Date: ${result.date}\n`;
     }
+    if (result.last_updated) {
+      formattedResults += `   Last updated: ${result.last_updated}\n`;
+    }
     formattedResults += `\n`;
   });
 
