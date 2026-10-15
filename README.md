@@ -167,6 +167,18 @@ Deep, comprehensive research backed by the Agent API `high` preset. Ideal for th
 ### **perplexity_reason**
 Advanced reasoning and problem-solving backed by the Agent API `medium` preset. Perfect for complex analytical tasks.
 
+`perplexity_ask` and `perplexity_reason` accept optional positive-integer `max_tokens` (total search context, up to 120,000) and `max_tokens_per_page` (context per result page, up to 20,000). These Agent API budgets control retrieved search content, not generated answer length. When omitted, the preset's search configuration remains in effect.
+
+The legacy `search_context_size` argument is still accepted, but is translated locally into explicit budgets rather than sent to the Agent API:
+
+| Legacy size | Total tokens | Tokens per page |
+|-------------|--------------|-----------------|
+| `low` | 2000 | 512 |
+| `medium` | 4000 | 1024 |
+| `high` | 8000 | 2048 |
+
+This compatibility policy is not an exact equivalent of Sonar's named sizes; the [Agent API migration guide](https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/how-to) has no named-size equivalent. Each explicit budget overrides its corresponding legacy default.
+
 > [!NOTE]
 > Presets are managed configurations (model, search setup, step budget) that Perplexity keeps tuned over time; see the [presets guide](https://docs.perplexity.ai/docs/agent-api/presets). Earlier versions of this server called the legacy `sonar-pro`, `sonar-reasoning-pro`, and `sonar-deep-research` models and accepted `strip_thinking` / `reasoning_effort` parameters. Those parameters are no longer part of the tool schemas and are ignored if sent; the Agent API produces no `<think>` tags.
 

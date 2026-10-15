@@ -336,6 +336,89 @@ describe("Transport Integration Tests", () => {
       }
     );
 
+    it.each(["perplexity_ask", "perplexity_reason"])(
+      "should advertise and forward explicit search budgets on %s", async (tool) => {
+        global.fetch = vi.fn().mockResolvedValue(agentSseResponse("ok"));
+        const { client, server } = await connectInMemoryClient();
+        try {
+          const listed = await client.listTools();
+          const schema = listed.tools.find((item) => item.name === tool)!.inputSchema;
+          expect(schema.properties).toHaveProperty("max_tokens");
+          expect(schema.properties).toHaveProperty("max_tokens_per_page");
+          const result = await client.callTool({
+            name: tool,
+            arguments: {
+              messages: [{ role: "user", content: "test" }],
+              search_context_size: "high",
+              max_tokens: 6000,
+              max_tokens_per_page: 1200,
+            },
+          });
+          expect(result.isError).toBeFalsy();
+          const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+          expect(body.tools).toEqual([{ type: "web_search", max_tokens: 6000, max_tokens_per_page: 1200 }]);
+        } finally {
+          await client.close();
+          await server.close();
+        }
+      }
+    );
+
+    it.each(["perplexity_ask", "perplexity_reason"])("should accept Agent search budgets at their caps on %s", async (tool) => {
+      global.fetch = vi.fn().mockResolvedValue(agentSseResponse("ok"));
+      const { client, server } = await connectInMemoryClient();
+      try {
+        const result = await client.callTool({
+          name: tool,
+          arguments: { messages: [{ role: "user", content: "test" }], max_tokens: 120_000, max_tokens_per_page: 20_000 },
+        });
+        expect(result.isError).toBeFalsy();
+        const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+        expect(body.tools).toEqual([{ type: "web_search", max_tokens: 120_000, max_tokens_per_page: 20_000 }]);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it.each([["max_tokens", 120_001], ["max_tokens_per_page", 20_001]] as const)(
+      "should reject Agent %s above its cap before calling the API", async (field, value) => {
+        global.fetch = vi.fn().mockResolvedValue(agentSseResponse("ok"));
+        const { client, server } = await connectInMemoryClient();
+        try {
+          for (const tool of ["perplexity_ask", "perplexity_reason"]) {
+            const result = await client.callTool({
+              name: tool,
+              arguments: { messages: [{ role: "user", content: "test" }], [field]: value },
+            });
+            expect(result.isError).toBe(true);
+          }
+          expect(global.fetch).not.toHaveBeenCalled();
+        } finally {
+          await client.close();
+          await server.close();
+        }
+      }
+    );
+
+    it.each([0, -1, 1.5, 1_000_001])("should reject invalid search budgets %s before calling the API", async (value) => {
+      global.fetch = vi.fn();
+      const { client, server } = await connectInMemoryClient();
+      try {
+        for (const field of ["max_tokens", "max_tokens_per_page"]) {
+          const result = await client.callTool({
+            name: "perplexity_ask",
+            arguments: { messages: [{ role: "user", content: "test" }], [field]: value },
+          });
+          expect(result.isError).toBe(true);
+        }
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
     it("should keep the search tool response shape", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,

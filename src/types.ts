@@ -97,6 +97,8 @@ export interface AgentToolOptions {
   search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
   search_domain_filter?: string[];
   search_context_size?: "low" | "medium" | "high";
+  max_tokens?: number;
+  max_tokens_per_page?: number;
 }
 
 export interface AgentProgressUpdate {
