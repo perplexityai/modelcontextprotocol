@@ -20,7 +20,7 @@ export type { ApiKeyProvider, PerplexityServerOptions } from "./types.js";
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 
 // Agent API presets backing each tool: https://docs.perplexity.ai/docs/agent-api/presets
 export const ASK_PRESET = "fast";
