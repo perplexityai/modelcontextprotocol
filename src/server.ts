@@ -94,7 +94,9 @@ async function makeApiRequest(
   // Read timeout fresh each time to respect env var changes
   const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
 
-  const url = new URL(`${PERPLEXITY_BASE_URL}/${endpoint}`);
+  // Append to the base path so a query string in the base URL is preserved.
+  const url = new URL(PERPLEXITY_BASE_URL);
+  url.pathname = `${url.pathname.replace(/\/$/, "")}/${endpoint}`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
   // An abort from the caller's signal also tears down an in-flight body stream.
