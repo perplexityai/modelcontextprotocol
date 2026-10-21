@@ -579,6 +579,27 @@ describe("Perplexity MCP Server", () => {
       }
     });
 
+    it("should keep PERPLEXITY_BASE_URL path and query on the agent path", async () => {
+      vi.resetModules();
+      process.env.PERPLEXITY_BASE_URL = "https://proxy.example.com/api/?key=x";
+      try {
+        const serverModule = await import("./server.js");
+        global.fetch = vi
+          .fn()
+          .mockResolvedValue(sseResponse([completedEvent("ok")]));
+
+        await serverModule.performAgentResponse(TEST_MESSAGES, "fast");
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          "https://proxy.example.com/api/v1/agent?key=x",
+          expect.anything()
+        );
+      } finally {
+        delete process.env.PERPLEXITY_BASE_URL;
+        vi.resetModules();
+      }
+    });
+
     it("should skip malformed stream chunks and still complete", async () => {
       const payload =
         "data: this-is-not-json\n\n" +
