@@ -15,6 +15,12 @@ import type {
   UndiciRequestOptions
 } from "./types.js";
 import { AgentResponseSchema, SearchResponseSchema } from "./validation.js";
+import {
+  citationsFromAgentResponse,
+  citationsFromSearchResponse,
+  getCitationCapabilities,
+  type Citation,
+} from "./citations.js";
 
 export type { ApiKeyProvider, PerplexityServerOptions } from "./types.js";
 
@@ -336,8 +342,10 @@ export function extractAgentText(response: AgentResponse): string {
  * missing or ambiguous, all unique source URLs are appended with positional
  * numbering instead.
  */
-export function formatAgentResponseText(response: AgentResponse): string {
-  const text = extractAgentText(response);
+export function formatAgentResponseText(
+  response: AgentResponse,
+  text: string = extractAgentText(response),
+): string {
 
   const entries: Array<{ id?: number | null; url: string }> = [];
   const urlById = new Map<number, string>();
@@ -412,6 +420,12 @@ function buildWebSearchTool(options?: AgentToolOptions): Record<string, unknown>
   return Object.keys(tool).length > 1 ? tool : undefined;
 }
 
+interface AgentResponseResult {
+  text: string;
+  textWithCitationsFooter: string;
+  citations: Citation[];
+}
+
 export async function performAgentResponse(
   messages: Message[],
   preset: string,
@@ -419,7 +433,7 @@ export async function performAgentResponse(
   options?: AgentToolOptions,
   hooks?: AgentCallHooks,
   apiKey?: ApiKeyProvider,
-): Promise<string> {
+): Promise<AgentResponseResult> {
   const webSearchTool = buildWebSearchTool(options);
 
   const body: Record<string, unknown> = {
@@ -453,7 +467,12 @@ export async function performAgentResponse(
   try {
     const response = await makeApiRequest("v1/agent", body, serviceOrigin, deadline.signal, apiKey);
     const agentResponse = await consumeAgentStream(response, hooks, serviceOrigin, deadline.signal, apiKey);
-    return formatAgentResponseText(agentResponse);
+    const text = extractAgentText(agentResponse);
+    return {
+      text,
+      textWithCitationsFooter: formatAgentResponseText(agentResponse, text),
+      citations: citationsFromAgentResponse(agentResponse),
+    };
   } catch (error) {
     if (hooks?.signal?.aborted) {
       throw new Error("Request cancelled");
@@ -493,6 +512,11 @@ export function formatSearchResults(data: SearchResponse): string {
   return formattedResults;
 }
 
+interface SearchResponseResult {
+  text: string;
+  citations: Citation[];
+}
+
 export async function performSearch(
   query: string,
   maxResults: number = 10,
@@ -501,7 +525,7 @@ export async function performSearch(
   filters?: SearchOptions,
   serviceOrigin?: string,
   apiKey?: ApiKeyProvider,
-): Promise<string> {
+): Promise<SearchResponseResult> {
   const body: Record<string, unknown> = {
     query: query,
     max_results: maxResults,
@@ -522,16 +546,43 @@ export async function performSearch(
     throw new Error(`Failed to parse JSON response from Perplexity Search API: ${error}`);
   }
 
-  return formatSearchResults(data);
+  return {
+    text: formatSearchResults(data),
+    citations: citationsFromSearchResponse(data),
+  };
 }
 
 interface ToolExtra {
   signal?: AbortSignal;
-  _meta?: { progressToken?: string | number };
+  _meta?: {
+    progressToken?: string | number;
+    [key: string]: unknown;
+  };
   sendNotification?: (notification: {
     method: string;
     params: Record<string, unknown>;
   }) => Promise<void>;
+}
+
+function withCitations<T extends Record<string, unknown>>(
+  result: T,
+  citations: Citation[],
+  extra: ToolExtra | undefined,
+): T & { citations?: Citation[] } {
+  const capabilities = getCitationCapabilities(extra);
+  if (!capabilities.supported || citations.length === 0) {
+    return result;
+  }
+  return { ...result, citations };
+}
+
+function selectAgentText(
+  result: AgentResponseResult,
+  extra: ToolExtra | undefined,
+): string {
+  return getCitationCapabilities(extra).render
+    ? result.text
+    : result.textWithCitationsFooter;
 }
 
 function buildHooks(extra: ToolExtra | undefined): AgentCallHooks {
@@ -656,10 +707,15 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         buildHooks(extra),
         serverOptions?.apiKey,
       );
-      return {
-        content: [{ type: "text" as const, text: result }],
-        structuredContent: { response: result },
-      };
+      const text = selectAgentText(result, extra);
+      return withCitations(
+        {
+          content: [{ type: "text" as const, text }],
+          structuredContent: { response: result.textWithCitationsFooter },
+        },
+        result.citations,
+        extra,
+      );
     }
   );
 
@@ -693,10 +749,15 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         buildHooks(extra),
         serverOptions?.apiKey,
       );
-      return {
-        content: [{ type: "text" as const, text: result }],
-        structuredContent: { response: result },
-      };
+      const text = selectAgentText(result, extra);
+      return withCitations(
+        {
+          content: [{ type: "text" as const, text }],
+          structuredContent: { response: result.textWithCitationsFooter },
+        },
+        result.citations,
+        extra,
+      );
     }
   );
 
@@ -744,10 +805,15 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         buildHooks(extra),
         serverOptions?.apiKey,
       );
-      return {
-        content: [{ type: "text" as const, text: result }],
-        structuredContent: { response: result },
-      };
+      const text = selectAgentText(result, extra);
+      return withCitations(
+        {
+          content: [{ type: "text" as const, text }],
+          structuredContent: { response: result.textWithCitationsFooter },
+        },
+        result.citations,
+        extra,
+      );
     }
   );
 
@@ -787,7 +853,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         destructiveHint: false,
       },
     },
-    async (args: any) => {
+    async (args: any, extra: any) => {
       const { query, max_results, max_tokens_per_page, country, search_recency_filter, search_domain_filter, search_type } = args as {
         query: string;
         max_results?: number;
@@ -806,11 +872,23 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         ...(search_type && { search_type }),
       };
 
-      const result = await performSearch(query, maxResults, maxTokensPerPage, countryCode, filters, serviceOrigin, serverOptions?.apiKey);
-      return {
-        content: [{ type: "text" as const, text: result }],
-        structuredContent: { results: result },
-      };
+      const result = await performSearch(
+        query,
+        maxResults,
+        maxTokensPerPage,
+        countryCode,
+        filters,
+        serviceOrigin,
+        serverOptions?.apiKey,
+      );
+      return withCitations(
+        {
+          content: [{ type: "text" as const, text: result.text }],
+          structuredContent: { results: result.text },
+        },
+        result.citations,
+        extra,
+      );
     }
   );
 
