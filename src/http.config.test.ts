@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Server } from "http";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createHttpApp, buildAllowedHosts } from "./http.js";
 
 /**
@@ -105,6 +106,11 @@ describe("HTTP transport configuration", () => {
       expect(preflight.headers.get("access-control-allow-origin")).toBe(
         "https://app.example",
       );
+      // Browser clients on the 2026-07-28 revision send these on every request.
+      const allowedHeaders = preflight.headers.get("access-control-allow-headers")?.toLowerCase();
+      for (const header of ["mcp-protocol-version", "mcp-method", "mcp-name"]) {
+        expect(allowedHeaders).toContain(header);
+      }
     });
 
     it("does not allow a non-allowlisted origin even when others are allowlisted", async () => {
@@ -380,6 +386,37 @@ describe("HTTP transport configuration", () => {
       expect(second.status).toBe(200);
       const data = await second.json();
       expect(data.result.tools).toHaveLength(4);
+    });
+
+    it("serves clients that negotiate the 2026-07-28 revision", async () => {
+      await start();
+
+      const client = new Client(
+        { name: "test-client", version: "1.0.0" },
+        { versionNegotiation: { mode: "auto" } },
+      );
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`)));
+      try {
+        expect(client.getProtocolEra()).toBe("modern");
+        const { tools } = await client.listTools();
+        expect(tools).toHaveLength(4);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("keeps serving clients that open with initialize", async () => {
+      await start();
+
+      const client = new Client({ name: "test-client", version: "1.0.0" });
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`)));
+      try {
+        expect(client.getProtocolEra()).toBe("legacy");
+        const { tools } = await client.listTools();
+        expect(tools).toHaveLength(4);
+      } finally {
+        await client.close();
+      }
     });
 
     it("serves the health endpoint", async () => {

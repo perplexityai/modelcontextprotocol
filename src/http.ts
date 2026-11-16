@@ -2,7 +2,12 @@
 
 import express, { type Express } from "express";
 import cors from "cors";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  NodeStreamableHTTPServerTransport,
+  toNodeHandler,
+  toWebRequest,
+} from "@modelcontextprotocol/node";
+import { createMcpHandler, isLegacyRequest } from "@modelcontextprotocol/server";
 import { createPerplexityServer } from "./server.js";
 import { logger } from "./logger.js";
 
@@ -91,7 +96,13 @@ export function createHttpApp(options: HttpAppOptions): Express {
         return callback(new CorsOriginNotAllowedError(origin));
       },
       exposedHeaders: ["Mcp-Session-Id", "mcp-protocol-version"],
-      allowedHeaders: ["Content-Type", "mcp-session-id"],
+      allowedHeaders: [
+        "Content-Type",
+        "mcp-session-id",
+        "mcp-protocol-version",
+        "mcp-method",
+        "mcp-name",
+      ],
     }),
   );
 
@@ -124,11 +135,27 @@ export function createHttpApp(options: HttpAppOptions): Express {
 
   app.use(express.json());
 
+  // Requests on the 2026-07-28 revision carry their protocol version per
+  // request; everything else is a 2025-era client and keeps the stateless
+  // JSON transport below.
+  const onerror = (error: Error) => {
+    logger.error("Error handling MCP request", { error: String(error) });
+  };
+  const modern = toNodeHandler(
+    createMcpHandler(() => createPerplexityServer(), { legacy: "reject", onerror }),
+    { onerror },
+  );
+
   app.all("/mcp", async (req, res) => {
     try {
+      if (!(await isLegacyRequest(await toWebRequest(req, req.body)))) {
+        await modern(req, res, req.body);
+        return;
+      }
+
       // Stateless mode: a Protocol instance supports one transport, so build
       // a fresh server + transport pair per request.
-      const transport = new StreamableHTTPServerTransport({
+      const transport = new NodeStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
       });

@@ -60,13 +60,15 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/node": "^2.1.1",
+    "@modelcontextprotocol/server": "^2.3.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "undici": "^6.20.0",
-    "zod": "^3.25.46"
+    "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^20",
@@ -77,6 +79,6 @@
     "vitest": "^4.0.5"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }

@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 import type {
@@ -525,32 +525,24 @@ export async function performSearch(
   return formatSearchResults(data);
 }
 
-interface ToolExtra {
-  signal?: AbortSignal;
-  _meta?: { progressToken?: string | number };
-  sendNotification?: (notification: {
-    method: string;
-    params: Record<string, unknown>;
-  }) => Promise<void>;
-}
-
-function buildHooks(extra: ToolExtra | undefined): AgentCallHooks {
-  const progressToken = extra?._meta?.progressToken;
-  const sendNotification = extra?.sendNotification;
+function buildHooks(ctx: ServerContext): AgentCallHooks {
+  const progressToken = ctx.mcpReq._meta?.progressToken;
   let progress = 0;
   return {
-    signal: extra?.signal,
+    signal: ctx.mcpReq.signal,
     onProgress:
-      progressToken !== undefined && sendNotification
+      progressToken !== undefined
         ? (update) => {
-            void sendNotification({
-              method: "notifications/progress",
-              params: {
-                progressToken,
-                progress: ++progress,
-                message: update.message,
-              },
-            }).catch(() => {});
+            void ctx.mcpReq
+              .notify({
+                method: "notifications/progress",
+                params: {
+                  progressToken,
+                  progress: ++progress,
+                  message: update.message,
+                },
+              })
+              .catch(() => {});
           }
         : undefined,
   };
@@ -595,22 +587,22 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
   const maxTokensPerPageField = z.number().int().positive().max(MAX_SEARCH_TOKENS_PER_PAGE).optional()
     .describe("Maximum search-context tokens extracted per result page. Overrides the legacy search_context_size per-page budget.");
 
-  const responseOutputSchema = {
+  const responseOutputSchema = z.object({
     response: z.string().describe("AI-generated text response with numbered citation references"),
-  };
+  });
 
   // Input schemas
-  const askAndReasonInputSchema = {
+  const askAndReasonInputSchema = z.object({
     messages: messagesField,
     search_recency_filter: searchRecencyFilterField,
     search_domain_filter: searchDomainFilterField,
     search_context_size: searchContextSizeField,
     max_tokens: maxTokensField,
     max_tokens_per_page: maxTokensPerPageField,
-  };
-  const researchInputSchema = {
+  });
+  const researchInputSchema = z.object({
     messages: messagesField,
-  };
+  });
 
   server.registerTool(
     "perplexity_ask",
@@ -622,8 +614,8 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search token budgets. " +
         "For in-depth multi-source research, use perplexity_research instead. " +
         "For step-by-step reasoning and analysis, use perplexity_reason instead.",
-      inputSchema: askAndReasonInputSchema as any,
-      outputSchema: responseOutputSchema as any,
+      inputSchema: askAndReasonInputSchema,
+      outputSchema: responseOutputSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -631,7 +623,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         destructiveHint: false,
       },
     },
-    async (args: any, extra: any) => {
+    async (args: any, ctx: ServerContext) => {
       const { messages, search_recency_filter, search_domain_filter, search_context_size, max_tokens, max_tokens_per_page } = args as {
         messages: Message[];
         search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
@@ -653,7 +645,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         ASK_PRESET,
         serviceOrigin,
         Object.keys(options).length > 0 ? options : undefined,
-        buildHooks(extra),
+        buildHooks(ctx),
         serverOptions?.apiKey,
       );
       return {
@@ -673,8 +665,8 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         "Significantly slower than other tools (can take minutes). " +
         "For quick factual questions, use perplexity_ask instead. " +
         "For logical analysis and reasoning, use perplexity_reason instead.",
-      inputSchema: researchInputSchema as any,
-      outputSchema: responseOutputSchema as any,
+      inputSchema: researchInputSchema,
+      outputSchema: responseOutputSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -682,7 +674,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         destructiveHint: false,
       },
     },
-    async (args: any, extra: any) => {
+    async (args: any, ctx: ServerContext) => {
       const { messages } = args as { messages: Message[] };
       validateMessages(messages, "perplexity_research");
       const result = await performAgentResponse(
@@ -690,7 +682,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         RESEARCH_PRESET,
         serviceOrigin,
         undefined,
-        buildHooks(extra),
+        buildHooks(ctx),
         serverOptions?.apiKey,
       );
       return {
@@ -710,8 +702,8 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         "Supports filtering by recency (hour/day/week/month/year), domain restrictions, and search token budgets. " +
         "For quick factual questions, use perplexity_ask instead. " +
         "For comprehensive multi-source research, use perplexity_research instead.",
-      inputSchema: askAndReasonInputSchema as any,
-      outputSchema: responseOutputSchema as any,
+      inputSchema: askAndReasonInputSchema,
+      outputSchema: responseOutputSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -719,7 +711,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         destructiveHint: false,
       },
     },
-    async (args: any, extra: any) => {
+    async (args: any, ctx: ServerContext) => {
       const { messages, search_recency_filter, search_domain_filter, search_context_size, max_tokens, max_tokens_per_page } = args as {
         messages: Message[];
         search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
@@ -741,7 +733,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         REASON_PRESET,
         serviceOrigin,
         Object.keys(options).length > 0 ? options : undefined,
-        buildHooks(extra),
+        buildHooks(ctx),
         serverOptions?.apiKey,
       );
       return {
@@ -751,7 +743,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
     }
   );
 
-  const searchInputSchema = {
+  const searchInputSchema = z.object({
     query: z.string().describe("Search query string"),
     max_results: z.number().min(1).max(20).optional()
       .describe("Maximum number of results to return (1-20, default: 10)"),
@@ -763,11 +755,11 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
     search_domain_filter: searchDomainFilterField,
     search_type: z.enum(["web", "fast"]).optional()
       .describe("Search backend. 'web' (default) is the standard web search. 'fast' is lower latency and lower cost; prefer it for routine lookups inside agent loops, and keep 'web' for rare or ambiguous questions."),
-  };
+  });
 
-  const searchOutputSchema = {
+  const searchOutputSchema = z.object({
     results: z.string().describe("Formatted search results, each with title, URL, snippet, and date"),
-  };
+  });
 
   server.registerTool(
     "perplexity_search",
@@ -778,8 +770,8 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
         "Returns formatted results (title, URL, snippet, date) with no AI synthesis. " +
         "Supports recency filters, domain restrictions, and a lower-latency fast search mode. " +
         "For AI-generated answers with citations, use perplexity_ask instead.",
-      inputSchema: searchInputSchema as any,
-      outputSchema: searchOutputSchema as any,
+      inputSchema: searchInputSchema,
+      outputSchema: searchOutputSchema,
       annotations: {
         readOnlyHint: true,
         openWorldHint: true,
@@ -814,42 +806,5 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
     }
   );
 
-  advertiseJsonSchema202012(server.server);
-
   return server.server;
-}
-
-// The MCP TypeScript SDK stamps draft-07 on tools/list schemas
-// (modelcontextprotocol/typescript-sdk#2084); 2020-12-only clients reject
-// them. The schemas are valid under both dialects, so only the declared
-// dialect needs rewriting. Remove once typescript-sdk#2085 ships.
-const JSON_SCHEMA_2020_12 = "https://json-schema.org/draft/2020-12/schema";
-
-function advertiseJsonSchema202012(server: McpServer["server"]) {
-  type ListToolsHandler = (request: unknown, extra: unknown) => Promise<{
-    tools: Array<{
-      inputSchema?: { $schema?: string };
-      outputSchema?: { $schema?: string };
-    }>;
-  }>;
-  // _requestHandlers is private SDK state; goes away with this shim.
-  const handlers = (server as unknown as {
-    _requestHandlers: Map<string, ListToolsHandler>;
-  })._requestHandlers;
-  const listTools = handlers.get("tools/list");
-  if (!listTools) {
-    return;
-  }
-  handlers.set("tools/list", async (request, extra) => {
-    const result = await listTools(request, extra);
-    for (const tool of result.tools ?? []) {
-      if (tool.inputSchema?.$schema) {
-        tool.inputSchema.$schema = JSON_SCHEMA_2020_12;
-      }
-      if (tool.outputSchema?.$schema) {
-        tool.outputSchema.$schema = JSON_SCHEMA_2020_12;
-      }
-    }
-    return result;
-  });
 }

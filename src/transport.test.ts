@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPerplexityServer, ASK_PRESET, REASON_PRESET, RESEARCH_PRESET } from "./server.js";
 import type { PerplexityServerOptions } from "./types.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { InMemoryTransport } from "@modelcontextprotocol/server";
+import { Client } from "@modelcontextprotocol/client";
+import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import express from "express";
 import cors from "cors";
 import { Server } from "http";
@@ -93,7 +93,7 @@ describe("Transport Integration Tests", () => {
       // Set up proper MCP endpoint with real transport
       app.post("/mcp", async (req, res) => {
         try {
-          const transport = new StreamableHTTPServerTransport({
+          const transport = new NodeStreamableHTTPServerTransport({
             sessionIdGenerator: undefined,
             enableJsonResponse: true,
           });
@@ -165,7 +165,7 @@ describe("Transport Integration Tests", () => {
       // Set up proper MCP endpoint with real transport
       app.post("/mcp", async (req, res) => {
         try {
-          const transport = new StreamableHTTPServerTransport({
+          const transport = new NodeStreamableHTTPServerTransport({
             sessionIdGenerator: undefined,
             enableJsonResponse: true,
           });
@@ -219,15 +219,15 @@ describe("Transport Integration Tests", () => {
       expect(data.jsonrpc).toBe("2.0");
       expect(data.id).toBe(2);
       
-      // McpServer returns tool errors as result.isError, not top-level error
-      expect(data.result).toBeDefined();
-      expect(data.result.isError).toBe(true);
-      expect(data.result.content[0].text).toContain("not found");
+      // An unknown tool is a protocol error, not a tool result.
+      expect(data.result).toBeUndefined();
+      expect(data.error.code).toBe(-32602);
+      expect(data.error.message).toContain("not found");
     });
 
     it("should require proper Accept headers", async () => {
       app.post("/mcp", async (req, res) => {
-        const transport = new StreamableHTTPServerTransport({
+        const transport = new NodeStreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
           enableJsonResponse: true,
         });
@@ -570,7 +570,6 @@ describe("Transport Integration Tests", () => {
             name: "perplexity_research",
             arguments: { messages: [{ role: "user", content: "test" }] },
           },
-          undefined,
           {
             onprogress: (p) => {
               progressMessages.push(p.message);
