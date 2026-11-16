@@ -370,8 +370,8 @@ describe("Server Utility Functions", () => {
 describe("createPerplexityServer tools/list schemas", () => {
   it("advertises JSON Schema 2020-12 on every input and output schema", async () => {
     vi.stubEnv("PERPLEXITY_API_KEY", "pplx-test");
-    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
-    const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+    const { Client } = await import("@modelcontextprotocol/client");
+    const { InMemoryTransport } = await import("@modelcontextprotocol/server");
     const { createPerplexityServer } = await import("./server.js");
 
     const server = createPerplexityServer();
