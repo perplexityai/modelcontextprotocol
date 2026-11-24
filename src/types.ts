@@ -87,6 +87,51 @@ export interface SearchRequestBody {
   country?: string;
 }
 
+export type ContextFormat = "markdown" | "html" | "links" | "highlights";
+
+export interface ContextCriteriaQuestion {
+  type: "noul";
+  instructions: string;
+  criteria?: { true?: string; false?: string };
+}
+
+/** Request body of POST /v1/context, sent to the API as given. */
+export interface ContextRequestBody {
+  urls: string[];
+  formats?: ContextFormat[];
+  highlights?: { query: string; max_tokens_per_url?: number };
+  if_modified_since?: string;
+  max_age_seconds?: number;
+  cache_only?: boolean;
+  snapshot_as_of?: string;
+  timeout_ms?: number;
+  criteria?: Record<string, ContextCriteriaQuestion>;
+}
+
+export interface ContextResult {
+  url: string;
+  status: { type: string; status_code?: number | null; message?: string | null };
+  metadata?: Record<string, unknown> | null;
+  markdown?: string | null;
+  html?: string | null;
+  links?: string[] | null;
+  highlights?: string | null;
+  criteria?: Record<string, { type: string; noul: number }> | null;
+  criteria_error?: string | null;
+}
+
+export interface ContextUsage {
+  fetched_urls?: number | null;
+  cost?: { total_cost?: number | null; currency?: string | null } | null;
+  criteria?: { input_tokens?: number | null } | null;
+}
+
+export interface ContextResponse {
+  request_id?: string | null;
+  results: ContextResult[];
+  usage?: ContextUsage | null;
+}
+
 export type SearchType = "web" | "fast";
 
 export interface SearchOptions extends Pick<AgentToolOptions, "search_recency_filter" | "search_domain_filter"> {
