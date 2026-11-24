@@ -909,14 +909,14 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
     urls: z.array(z.string()).min(1).max(50)
       .describe("http or https URLs to fetch (1-50). Each URL gets its own result and status."),
     formats: z.array(z.enum(["markdown", "html", "links", "highlights"])).optional()
-      .describe("What to return for each page besides metadata (default: ['markdown']). 'highlights' also requires the highlights object. [] returns metadata only."),
+      .describe("What to return for each page (default: ['markdown']). Every result with status ok or not_modified includes metadata, so do not list it; pass [] for metadata only. 'highlights' also requires the highlights object."),
     highlights: z.object({
       query: z.string()
         .describe("What to look for in each page (1-1024 characters)"),
       max_tokens_per_url: z.number().int().min(1).max(4096).optional()
         .describe("Maximum length of each page's highlights in tokens (1-4096, default: 1024)"),
     }).strict().optional()
-      .describe("Settings for the 'highlights' format. Requires 'highlights' in formats."),
+      .describe("Settings for the 'highlights' format. Whenever you set this, also set formats to include 'highlights' (e.g., formats: ['highlights']). A request that sets highlights fails if formats is omitted or does not include 'highlights'."),
     if_modified_since: z.string().optional()
       .describe("A metadata last_modified value from an earlier result, in IMF-fixdate form (e.g., 'Thu, 03 Dec 1992 08:37:20 GMT'). Requires exactly one URL and max_age_seconds 0. A page that has not changed returns status not_modified and no content."),
     max_age_seconds: z.number().int().min(0).max(63072000).optional()
@@ -942,7 +942,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       }).strict().optional()
         .describe("Optional descriptions of what makes the answer true and what makes it false"),
     }).strict()).optional()
-      .describe("Yes or no questions to score each page with, keyed by question ID (1-5 questions). IDs must match [A-Za-z0-9_-]{1,64}, and 'query' is reserved. Each answer is a probability of yes from 0 to 1. Scoring does not filter or reorder results."),
+      .describe("Yes or no questions to score each page with (1-5 questions). An object keyed by question ID. Each value is an object with type 'noul', the question in instructions, and optionally a nested criteria object that says what makes the answer true or false (e.g., {\"is_changelog\": {\"type\": \"noul\", \"instructions\": \"Is this page a product changelog?\", \"criteria\": {\"true\": \"The page lists dated releases.\", \"false\": \"The page is not a list of releases.\"}}}). IDs must match [A-Za-z0-9_-]{1,64}. 'query' is reserved, and this tool does not accept '__proto__'. Each answer is a probability of yes from 0 to 1. Scoring does not filter or reorder results."),
   }).strict();
 
   const contextOutputSchema = {
@@ -955,7 +955,7 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       title: "Fetch Web Pages",
       description: "Fetch web pages by URL through the Perplexity Context API. " +
         "Best for: reading pages when you already have the URLs. " +
-        "Returns Markdown by default. Can also return HTML, links, the passages most relevant to a query (highlights), page metadata, and yes or no scores for your questions (criteria). " +
+        "Returns Markdown by default. Can also return HTML, links, the passages most relevant to a query (highlights), and yes or no scores for your questions (criteria). Every result with status ok or not_modified includes page metadata. " +
         "Full pages can be long; to get specific facts, set formats to ['highlights'] and set highlights.query. " +
         "To find URLs, use perplexity_search instead.",
       inputSchema: contextInputSchema as any,
