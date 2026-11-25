@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  formatContextResults,
   formatSearchResults,
   performAgentResponse,
+  performContext,
   performSearch,
 } from "./server.js";
 import type { AgentOutputItem, AgentProgressUpdate } from "./types.js";
 
 const AGENT_URL = "https://api.perplexity.ai/v1/agent";
 const SEARCH_URL = "https://api.perplexity.ai/search";
+const CONTEXT_URL = "https://api.perplexity.ai/v1/context";
 const TEST_MESSAGES = [{ role: "user", content: "test question" }];
 
 function encodeSse(events: Array<Record<string, unknown>>): Uint8Array {
@@ -127,9 +130,9 @@ describe("Perplexity MCP Server", () => {
           headers: {
             "Content-Type": "application/json",
             Authorization: "Bearer test-api-key",
-            "User-Agent": "perplexity-mcp/1.4.0",
+            "User-Agent": "perplexity-mcp/1.5.0",
             "X-Source": "pplx-mcp-server",
-            "X-Pplx-Integration": "perplexity-mcp/1.4.0",
+            "X-Pplx-Integration": "perplexity-mcp/1.5.0",
           },
           body: JSON.stringify({
             preset: "fast",
@@ -800,6 +803,207 @@ describe("Perplexity MCP Server", () => {
       await expect(performSearch("test")).rejects.toThrow(
         "Unable to parse error response"
       );
+    });
+  });
+
+  describe("performContext", () => {
+    const okResponse = {
+      request_id: "req_test",
+      results: [{ url: "https://example.com", status: { type: "ok", status_code: 200 } }],
+      usage: { fetched_urls: 1, cost: { total_cost: 0.001, currency: "USD" } },
+    };
+
+    it("should send every Context API parameter unchanged", async () => {
+      const request = {
+        urls: ["https://example.com/a", "https://example.com/b"],
+        formats: ["markdown", "html", "links", "highlights"] as const,
+        highlights: { query: "pricing", max_tokens_per_url: 64 },
+        if_modified_since: "Thu, 03 Dec 1992 08:37:20 GMT",
+        max_age_seconds: 0,
+        cache_only: false,
+        snapshot_as_of: "2026-11-01T00:00:00Z",
+        timeout_ms: 110000,
+        criteria: {
+          is_docs: {
+            type: "noul" as const,
+            instructions: "Is this page documentation?",
+            criteria: { true: "It documents an API.", false: "It is marketing." },
+          },
+        },
+      };
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => okResponse,
+      } as Response);
+
+      await performContext({ ...request, formats: [...request.formats] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        CONTEXT_URL,
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+            Authorization: "Bearer test-api-key",
+          }),
+          body: JSON.stringify(request),
+        })
+      );
+    });
+
+    it("should send no parameter that is not set and keep falsy values", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => okResponse,
+      } as Response);
+
+      await performContext({ urls: ["https://example.com"] });
+      await performContext({ urls: ["https://example.com"], formats: [], max_age_seconds: 0, cache_only: false });
+
+      const bodies = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map(
+        (call) => call[1].body as string
+      );
+      expect(bodies[0]).toBe(JSON.stringify({ urls: ["https://example.com"] }));
+      expect(bodies[1]).toBe(
+        JSON.stringify({ urls: ["https://example.com"], formats: [], max_age_seconds: 0, cache_only: false })
+      );
+    });
+
+    it("should pass Context API errors through", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        text: async () => '{"error":{"message":"highlights is required when formats has highlights"}}',
+      } as Response);
+
+      await expect(
+        performContext({ urls: ["https://example.com"], formats: ["highlights"] })
+      ).rejects.toThrow(
+        'Perplexity API error: 400 Bad Request\n{"error":{"message":"highlights is required when formats has highlights"}}'
+      );
+    });
+
+    it("should wrap malformed context responses", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ results: [{ url: "https://example.com" }] }),
+      } as Response);
+
+      await expect(performContext({ urls: ["https://example.com"] })).rejects.toThrow(
+        "Failed to parse JSON response from Perplexity Context API"
+      );
+    });
+
+    it("should keep metadata keys and status values the schema does not name", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          request_id: "req_open",
+          results: [
+            {
+              url: "https://example.com",
+              status: { type: "ok", status_code: 200 },
+              metadata: { source_url: "https://example.com/", "og:title": "Example", "og:image": ["a.png", "b.png"] },
+            },
+            { url: "https://example.org", status: { type: "new_status" } },
+          ],
+          usage: { fetched_urls: 1, cost: { total_cost: 0.001, currency: "USD" } },
+        }),
+      } as Response);
+
+      const result = await performContext({ urls: ["https://example.com", "https://example.org"], formats: [] });
+
+      expect(result).toContain("og:title: Example");
+      expect(result).toContain('og:image: ["a.png","b.png"]');
+      expect(result).toContain("Status: new_status");
+    });
+  });
+
+  describe("formatContextResults", () => {
+    it("should print every response field", () => {
+      const formatted = formatContextResults({
+        request_id: "req_all",
+        results: [
+          {
+            url: "https://example.com/page",
+            status: { type: "ok", status_code: 200 },
+            metadata: {
+              source_url: "https://example.com/page",
+              title: "Example Page",
+              origin: "cached",
+              fetched_at: "2026-11-19T21:26:30Z",
+              last_modified: "Thu, 03 Dec 1992 08:37:20 GMT",
+            },
+            criteria: { is_docs: { type: "noul", noul: 0.9965497817551804 } },
+            highlights: "A relevant passage.",
+            markdown: "# Example Page\n\nBody text.",
+            html: "<h1>Example Page</h1>",
+            links: ["https://example.com/a", "https://example.com/b"],
+          },
+        ],
+        usage: {
+          fetched_urls: 1,
+          cost: { total_cost: 0.00101, currency: "USD" },
+          criteria: { input_tokens: 118 },
+        },
+      });
+
+      expect(formatted).toBe(
+        "Context results for 1 URL:\n\n" +
+          "1. URL: https://example.com/page\n" +
+          "   Status: ok\n" +
+          "   Status code: 200\n" +
+          "   Metadata:\n" +
+          "     source_url: https://example.com/page\n" +
+          "     title: Example Page\n" +
+          "     origin: cached\n" +
+          "     fetched_at: 2026-11-19T21:26:30Z\n" +
+          "     last_modified: Thu, 03 Dec 1992 08:37:20 GMT\n" +
+          "   Criteria:\n" +
+          "     is_docs: noul 0.9965497817551804\n" +
+          "   Highlights:\nA relevant passage.\n" +
+          "   Markdown:\n# Example Page\n\nBody text.\n" +
+          "   HTML:\n<h1>Example Page</h1>\n" +
+          "   Links (2):\n" +
+          "   - https://example.com/a\n" +
+          "   - https://example.com/b\n" +
+          "\n" +
+          "Billed URLs: 1\n" +
+          "Cost: 0.00101 USD\n" +
+          "Criteria input tokens: 118\n" +
+          "Request ID: req_all\n"
+      );
+    });
+
+    it("should render failed and partial results without leaking 'undefined' or 'null'", () => {
+      const formatted = formatContextResults({
+        results: [
+          {
+            url: "https://example.com/missing",
+            status: { type: "crawl_failed", status_code: 404, message: "The page could not be fetched." },
+          },
+          { url: "not a url", status: { type: "invalid_url", status_code: null, message: null } },
+          {
+            url: "https://example.com/unscored",
+            status: { type: "ok" },
+            metadata: null,
+            markdown: null,
+            links: [],
+            criteria: null,
+            criteria_error: "timeout",
+          },
+        ],
+        usage: { fetched_urls: 1, cost: null, criteria: { input_tokens: 0 } },
+      });
+
+      expect(formatted).toContain("Status: crawl_failed\n   Status code: 404\n   Message: The page could not be fetched.\n");
+      expect(formatted).toContain("2. URL: not a url\n   Status: invalid_url\n\n");
+      expect(formatted).toContain("Criteria error: timeout");
+      expect(formatted).toContain("Links (0):");
+      expect(formatted).toContain("Criteria input tokens: 0");
+      expect(formatted).not.toContain("undefined");
+      expect(formatted).not.toContain("null");
     });
   });
 

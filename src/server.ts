@@ -8,19 +8,21 @@ import type {
   AgentToolOptions,
   AgentCallHooks,
   ApiKeyProvider,
+  ContextRequestBody,
+  ContextResponse,
   PerplexityServerOptions,
   SearchOptions,
   SearchResponse,
   SearchType,
   UndiciRequestOptions
 } from "./types.js";
-import { AgentResponseSchema, SearchResponseSchema } from "./validation.js";
+import { AgentResponseSchema, ContextResponseSchema, SearchResponseSchema } from "./validation.js";
 
 export type { ApiKeyProvider, PerplexityServerOptions } from "./types.js";
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 
 // Agent API presets backing each tool: https://docs.perplexity.ai/docs/agent-api/presets
 export const ASK_PRESET = "fast";
@@ -525,6 +527,91 @@ export async function performSearch(
   return formatSearchResults(data);
 }
 
+export function formatContextResults(data: ContextResponse): string {
+  const text = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
+
+  let formatted = `Context results for ${data.results.length} ${data.results.length === 1 ? "URL" : "URLs"}:\n\n`;
+
+  data.results.forEach((result, index) => {
+    formatted += `${index + 1}. URL: ${result.url}\n`;
+    formatted += `   Status: ${result.status.type}\n`;
+    if (result.status.status_code != null) {
+      formatted += `   Status code: ${result.status.status_code}\n`;
+    }
+    if (result.status.message) {
+      formatted += `   Message: ${result.status.message}\n`;
+    }
+    if (result.metadata) {
+      formatted += `   Metadata:\n`;
+      for (const [key, value] of Object.entries(result.metadata)) {
+        formatted += `     ${key}: ${text(value)}\n`;
+      }
+    }
+    if (result.criteria) {
+      formatted += `   Criteria:\n`;
+      for (const [id, answer] of Object.entries(result.criteria)) {
+        formatted += `     ${id}: ${answer.type} ${answer.noul}\n`;
+      }
+    }
+    if (result.criteria_error) {
+      formatted += `   Criteria error: ${result.criteria_error}\n`;
+    }
+    if (result.highlights != null) {
+      formatted += `   Highlights:\n${result.highlights}\n`;
+    }
+    if (result.markdown != null) {
+      formatted += `   Markdown:\n${result.markdown}\n`;
+    }
+    if (result.html != null) {
+      formatted += `   HTML:\n${result.html}\n`;
+    }
+    if (result.links) {
+      formatted += `   Links (${result.links.length}):\n`;
+      for (const link of result.links) {
+        formatted += `   - ${link}\n`;
+      }
+    }
+    formatted += `\n`;
+  });
+
+  if (data.usage?.fetched_urls != null) {
+    formatted += `Billed URLs: ${data.usage.fetched_urls}\n`;
+  }
+  if (data.usage?.cost?.total_cost != null) {
+    formatted += `Cost: ${data.usage.cost.total_cost}${data.usage.cost.currency ? ` ${data.usage.cost.currency}` : ""}\n`;
+  }
+  if (data.usage?.criteria?.input_tokens != null) {
+    formatted += `Criteria input tokens: ${data.usage.criteria.input_tokens}\n`;
+  }
+  if (data.request_id) {
+    formatted += `Request ID: ${data.request_id}\n`;
+  }
+
+  return formatted;
+}
+
+export async function performContext(
+  request: ContextRequestBody,
+  serviceOrigin?: string,
+  apiKey?: ApiKeyProvider,
+  signal?: AbortSignal,
+): Promise<string> {
+  // The request is the Context API body as given: no local defaults, so a
+  // parameter that is not set gets the API default. The signal is passed
+  // because one call can run for the full timeout_ms plus criteria scoring.
+  const response = await makeApiRequest("v1/context", { ...request }, serviceOrigin, signal, apiKey);
+
+  let data: ContextResponse;
+  try {
+    const json = await response.json();
+    data = ContextResponseSchema.parse(json);
+  } catch (error) {
+    throw new Error(`Failed to parse JSON response from Perplexity Context API: ${error}`);
+  }
+
+  return formatContextResults(data);
+}
+
 interface ToolExtra {
   signal?: AbortSignal;
   _meta?: { progressToken?: string | number };
@@ -566,10 +653,11 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       instructions:
         "Perplexity AI server for web-grounded search, research, and reasoning, backed by the Perplexity Agent API. " +
         "Use perplexity_search for finding URLs, facts, and recent news. Supports recency filters, domain restrictions, and fast search. " +
+        "Use perplexity_context to read the content of pages when you have the URLs. " +
         "Use perplexity_ask for quick AI-answered questions with citations. Supports recency filters, domain restrictions, and search token budgets. " +
         "Use perplexity_research for in-depth multi-source investigation (slow, can take minutes). " +
         "Use perplexity_reason for complex analysis requiring step-by-step logic. Supports recency filters, domain restrictions, and search token budgets. " +
-        "All tools are read-only and access live web data.",
+        "All tools are read-only. perplexity_context can return a stored copy of a page.",
     }
   );
 
@@ -807,6 +895,80 @@ export function createPerplexityServer(serviceOrigin?: string, serverOptions?: P
       };
 
       const result = await performSearch(query, maxResults, maxTokensPerPage, countryCode, filters, serviceOrigin, serverOptions?.apiKey);
+      return {
+        content: [{ type: "text" as const, text: result }],
+        structuredContent: { results: result },
+      };
+    }
+  );
+
+  // The input schema is the request body of POST /v1/context: same names,
+  // nesting, and ranges. It is strict at every level because the API rejects
+  // unknown parameters. Rules between parameters are left to the API.
+  const contextInputSchema = z.object({
+    urls: z.array(z.string()).min(1).max(50)
+      .describe("http or https URLs to fetch (1-50). Each URL gets its own result and status."),
+    formats: z.array(z.enum(["markdown", "html", "links", "highlights"])).optional()
+      .describe("What to return for each page (default: ['markdown']). Every result with status ok or not_modified includes metadata, so do not list it; pass [] for metadata only. 'highlights' also requires the highlights object."),
+    highlights: z.object({
+      query: z.string()
+        .describe("What to look for in each page (1-1024 characters)"),
+      max_tokens_per_url: z.number().int().min(1).max(4096).optional()
+        .describe("Maximum length of each page's highlights in tokens (1-4096, default: 1024)"),
+    }).strict().optional()
+      .describe("Settings for the 'highlights' format. Whenever you set this, also set formats to include 'highlights' (e.g., formats: ['highlights']). A request that sets highlights fails if formats is omitted or does not include 'highlights'."),
+    if_modified_since: z.string().optional()
+      .describe("A metadata last_modified value from an earlier result, in IMF-fixdate form (e.g., 'Thu, 03 Dec 1992 08:37:20 GMT'). Requires exactly one URL and max_age_seconds 0. A page that has not changed returns status not_modified and no content."),
+    max_age_seconds: z.number().int().min(0).max(63072000).optional()
+      .describe("Maximum age in seconds of a stored copy to accept (0-63072000, default: 172800). 0 always fetches the page live. Cannot be combined with snapshot_as_of."),
+    cache_only: z.boolean().optional()
+      .describe("When true, read only stored copies and never fetch live (default: false). A URL with no stored copy returns status no_content. Requires max_age_seconds above 0. Cannot be combined with snapshot_as_of."),
+    snapshot_as_of: z.string().optional()
+      .describe("Return each page as stored at or before this RFC 3339 time with a time zone (e.g., '2026-11-01T00:00:00Z'). Must not be in the future or more than 365 days ago. Never fetches live. Cannot be combined with max_age_seconds, cache_only, or if_modified_since."),
+    timeout_ms: z.number().int().min(1000).max(110000).optional()
+      .describe("Time budget in milliseconds for fetching the pages (1000-110000). A URL that does not finish in time returns status crawl_timeout."),
+    // Zod drops a record key named __proto__, so the question would not reach
+    // the API. Reject it instead of sending a different request.
+    criteria: z.record(z.string().refine((id) => id !== "__proto__", "'__proto__' cannot be used as a question ID in this tool"), z.object({
+      type: z.enum(["noul"])
+        .describe("Question type. Always 'noul'."),
+      instructions: z.string()
+        .describe("The yes or no question to answer, or the statement to check (1-1000 characters)"),
+      criteria: z.object({
+        true: z.string().optional()
+          .describe("What makes the answer true (1-500 characters)"),
+        false: z.string().optional()
+          .describe("What makes the answer false (1-500 characters)"),
+      }).strict().optional()
+        .describe("Optional descriptions of what makes the answer true and what makes it false"),
+    }).strict()).optional()
+      .describe("Yes or no questions to score each page with (1-5 questions). An object keyed by question ID. Each value is an object with type 'noul', the question in instructions, and optionally a nested criteria object that says what makes the answer true or false (e.g., {\"is_changelog\": {\"type\": \"noul\", \"instructions\": \"Is this page a product changelog?\", \"criteria\": {\"true\": \"The page lists dated releases.\", \"false\": \"The page is not a list of releases.\"}}}). IDs must match [A-Za-z0-9_-]{1,64}. 'query' is reserved, and this tool does not accept '__proto__'. Each answer is a probability of yes from 0 to 1. Scoring does not filter or reorder results."),
+  }).strict();
+
+  const contextOutputSchema = {
+    results: z.string().describe("Formatted results in request order, each with URL, status, metadata, criteria answers, and the requested formats, followed by usage and the request ID"),
+  };
+
+  server.registerTool(
+    "perplexity_context",
+    {
+      title: "Fetch Web Pages",
+      description: "Fetch web pages by URL through the Perplexity Context API. " +
+        "Best for: reading pages when you already have the URLs. " +
+        "Returns Markdown by default. Can also return HTML, links, the passages most relevant to a query (highlights), and yes or no scores for your questions (criteria). Every result with status ok or not_modified includes page metadata. " +
+        "Full pages can be long; to get specific facts, set formats to ['highlights'] and set highlights.query. " +
+        "To find URLs, use perplexity_search instead.",
+      inputSchema: contextInputSchema as any,
+      outputSchema: contextOutputSchema as any,
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+        idempotentHint: false,
+        destructiveHint: false,
+      },
+    },
+    async (args: any, extra: any) => {
+      const result = await performContext(args as ContextRequestBody, serviceOrigin, serverOptions?.apiKey, extra?.signal);
       return {
         content: [{ type: "text" as const, text: result }],
         structuredContent: { results: result },

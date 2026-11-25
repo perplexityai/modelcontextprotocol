@@ -8,7 +8,7 @@
 &nbsp;
 [![npm version](https://img.shields.io/npm/v/%40perplexity-ai%2Fmcp-server?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@perplexity-ai/mcp-server)
 
-The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through the [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) and the Search API.
+The official MCP server implementation for the Perplexity API Platform, providing AI assistants with real-time web search, reasoning, and research capabilities through the [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart), the Search API, and the [Context API](https://docs.perplexity.ai/docs/context/quickstart).
 
 ## Remote MCP Server
 
@@ -157,6 +157,9 @@ The server will be accessible at `http://localhost:8080/mcp`
 Search results include publication and last-updated dates when available. Missing or null dates are omitted from the formatted output.
 
 Direct web search using the Perplexity Search API. Returns ranked search results with metadata, perfect for finding current information. Supports recency filters (`search_recency_filter`), domain restrictions (`search_domain_filter`), and [Fast Search](https://docs.perplexity.ai/docs/search/fast-search) (`search_type: "fast"`) for lower latency and cost.
+
+### **perplexity_context**
+Fetch web pages by URL using the Perplexity [Context API](https://docs.perplexity.ai/docs/context/quickstart). Returns the content of each page as Markdown by default, and can also return HTML, links, the passages most relevant to a query (`highlights`), and yes or no scores for your questions (`criteria`). Every result with status `ok` or `not_modified` includes page metadata. The tool input is the request body of [`POST /v1/context`](https://docs.perplexity.ai/api-reference/context-post), with the same parameter names: `urls`, `formats`, `highlights`, `if_modified_since`, `max_age_seconds`, `cache_only`, `snapshot_as_of`, `timeout_ms`, and `criteria`. The server sends the parameters as given and rejects a parameter that the API does not have.
 
 ### **perplexity_ask**
 General-purpose conversational AI with real-time web search, backed by the Agent API `fast` preset. Great for quick questions and everyday searches.

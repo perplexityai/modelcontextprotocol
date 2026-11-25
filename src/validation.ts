@@ -69,3 +69,45 @@ export const SearchResponseSchema = z.object({
   query: z.string().optional(),
   usage: SearchUsageSchema.optional(),
 });
+
+// Context API response schemas. Lenient like the Agent schemas: metadata has
+// open keys (page meta tags), and status.type, metadata.origin, and
+// criteria_error stay plain strings so a new upstream value never fails parsing.
+export const ContextResultSchema = z
+  .object({
+    url: z.string(),
+    status: z
+      .object({
+        type: z.string(),
+        status_code: z.number().nullish(),
+        message: z.string().nullish(),
+      })
+      .passthrough(),
+    metadata: z.record(z.unknown()).nullish(),
+    markdown: z.string().nullish(),
+    html: z.string().nullish(),
+    links: z.array(z.string()).nullish(),
+    highlights: z.string().nullish(),
+    criteria: z.record(z.object({ type: z.string(), noul: z.number() }).passthrough()).nullish(),
+    criteria_error: z.string().nullish(),
+  })
+  .passthrough();
+
+export const ContextUsageSchema = z
+  .object({
+    fetched_urls: z.number().nullish(),
+    cost: z
+      .object({ total_cost: z.number().nullish(), currency: z.string().nullish() })
+      .passthrough()
+      .nullish(),
+    criteria: z.object({ input_tokens: z.number().nullish() }).passthrough().nullish(),
+  })
+  .passthrough();
+
+export const ContextResponseSchema = z
+  .object({
+    request_id: z.string().nullish(),
+    results: z.array(ContextResultSchema),
+    usage: ContextUsageSchema.nullish(),
+  })
+  .passthrough();

@@ -144,14 +144,15 @@ describe("Transport Integration Tests", () => {
       expect(data.id).toBe(1);
       expect(data.result).toBeDefined();
       expect(data.result.tools).toBeDefined();
-      expect(data.result.tools).toHaveLength(4);
+      expect(data.result.tools).toHaveLength(5);
       
-      // Verify all four tools are present
+      // Verify all five tools are present
       const toolNames = data.result.tools.map((t: { name: string }) => t.name);
       expect(toolNames).toContain("perplexity_ask");
       expect(toolNames).toContain("perplexity_research");
       expect(toolNames).toContain("perplexity_reason");
       expect(toolNames).toContain("perplexity_search");
+      expect(toolNames).toContain("perplexity_context");
       
       // Verify tool schema structure
       expect(data.result.tools[0].inputSchema).toBeDefined();
@@ -440,6 +441,111 @@ describe("Transport Integration Tests", () => {
         expect(result.content[0].type).toBe("text");
         expect(result.content[0].text).toContain("Found 1 search results");
         expect(result.structuredContent.results).toBe(result.content[0].text);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("should keep the context tool response shape and forward the request body", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          request_id: "req_transport",
+          results: [
+            { url: "https://example.com", status: { type: "ok", status_code: 200 }, highlights: "passage" },
+          ],
+          usage: { fetched_urls: 1, cost: { total_cost: 0.001, currency: "USD" } },
+        }),
+      } as Response);
+
+      const { client, server } = await connectInMemoryClient();
+      try {
+        const args = {
+          urls: ["https://example.com"],
+          formats: ["highlights"],
+          highlights: { query: "passage", max_tokens_per_url: 64 },
+          max_age_seconds: 0,
+        };
+        const result: any = await client.callTool({ name: "perplexity_context", arguments: args });
+
+        expect(result.isError).toBeFalsy();
+        expect(result.content[0].type).toBe("text");
+        expect(result.content[0].text).toContain("Context results for 1 URL:");
+        expect(result.structuredContent.results).toBe(result.content[0].text);
+        const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(url).toBe("https://api.perplexity.ai/v1/context");
+        expect(JSON.parse(init.body as string)).toEqual(args);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it.each([
+      ["a top-level parameter", { urls: ["https://example.com"], not_a_field: true }, "not_a_field"],
+      ["a highlights field", { urls: ["https://example.com"], highlights: { query: "q", extra: 1 } }, "extra"],
+      ["a criteria question field", { urls: ["https://example.com"], criteria: { a: { type: "noul", instructions: "q", threshold: 0.5 } } }, "threshold"],
+    ])("should reject %s the Context API does not have without calling it", async (_label, args, key) => {
+      global.fetch = vi.fn();
+
+      const { client, server } = await connectInMemoryClient();
+      try {
+        const result: any = await client.callTool({ name: "perplexity_context", arguments: args });
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain(`Unrecognized key(s) in object: '${key}'`);
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("should reject a criteria ID that Zod cannot keep instead of dropping the question", async () => {
+      global.fetch = vi.fn();
+
+      const { client, server } = await connectInMemoryClient();
+      try {
+        // JSON.parse makes __proto__ an own key, as it is on the wire.
+        const args = JSON.parse(
+          '{"urls":["https://example.com"],"criteria":{"a":{"type":"noul","instructions":"q"},"__proto__":{"type":"noul","instructions":"q"}}}'
+        );
+        const result: any = await client.callTool({ name: "perplexity_context", arguments: args });
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("'__proto__' cannot be used as a question ID in this tool");
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("should abort the upstream context request when the client cancels the call", async () => {
+      let upstreamSignal: AbortSignal | undefined;
+      global.fetch = vi.fn().mockImplementation((_url, init: RequestInit) => {
+        upstreamSignal = init.signal ?? undefined;
+        return new Promise((_resolve, reject) => {
+          init.signal!.addEventListener("abort", () => {
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          });
+        });
+      });
+
+      const { client, server } = await connectInMemoryClient();
+      try {
+        const cancel = new AbortController();
+        const call = client.callTool(
+          { name: "perplexity_context", arguments: { urls: ["https://example.com"] } },
+          undefined,
+          { signal: cancel.signal }
+        );
+        await vi.waitFor(() => expect(global.fetch).toHaveBeenCalled());
+        cancel.abort();
+
+        await expect(call).rejects.toThrow();
+        await vi.waitFor(() => expect(upstreamSignal?.aborted).toBe(true));
       } finally {
         await client.close();
         await server.close();

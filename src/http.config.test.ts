@@ -379,7 +379,7 @@ describe("HTTP transport configuration", () => {
       const second = await listTools();
       expect(second.status).toBe(200);
       const data = await second.json();
-      expect(data.result.tools).toHaveLength(4);
+      expect(data.result.tools).toHaveLength(5);
     });
 
     it("serves the health endpoint", async () => {
