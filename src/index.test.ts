@@ -390,6 +390,28 @@ describe("Perplexity MCP Server", () => {
       );
     });
 
+    // setTimeout treats these delays as 1ms, which used to abort every request.
+    it.each(["0", "-1", "abc", "3000000000"])(
+      "should not time out at once when PERPLEXITY_TIMEOUT_MS is %s",
+      async (value) => {
+        process.env.PERPLEXITY_TIMEOUT_MS = value;
+
+        global.fetch = vi.fn().mockImplementation((_url, options) => {
+          return new Promise((resolve, reject) => {
+            const signal = options?.signal as AbortSignal;
+            signal?.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted.", "AbortError"));
+            });
+            setTimeout(() => {
+              resolve(sseResponse([completedEvent("on time")]));
+            }, 20);
+          });
+        });
+
+        await expect(performAgentResponse(TEST_MESSAGES, "fast")).resolves.toBe("on time");
+      }
+    );
+
     it("should time out a stalled stream and cancel the server-side run", async () => {
       process.env.PERPLEXITY_TIMEOUT_MS = "100";
       const cancelCalls: string[] = [];
@@ -704,6 +726,27 @@ describe("Perplexity MCP Server", () => {
       await expect(performSearch("invalid dates")).rejects.toThrow(
         "Failed to parse JSON response from Perplexity Search API"
       );
+    });
+
+    it("should not time out a search at once when PERPLEXITY_TIMEOUT_MS is too large", async () => {
+      process.env.PERPLEXITY_TIMEOUT_MS = "3000000000";
+
+      global.fetch = vi.fn().mockImplementation((_url, options) => {
+        return new Promise((resolve, reject) => {
+          const signal = options?.signal as AbortSignal;
+          signal?.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          });
+          setTimeout(() => {
+            resolve({
+              ok: true,
+              json: async () => ({ results: [{ title: "On time", url: "https://example.com" }] }),
+            } as Response);
+          }, 20);
+        });
+      });
+
+      await expect(performSearch("slow query")).resolves.toContain("On time");
     });
 
     it("should successfully perform search", async () => {

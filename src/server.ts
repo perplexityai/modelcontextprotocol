@@ -29,6 +29,19 @@ export const ASK_PRESET = "fast";
 export const REASON_PRESET = "medium";
 export const RESEARCH_PRESET = "high";
 
+const DEFAULT_TIMEOUT_MS = 300000;
+// setTimeout fires after 1ms when the delay is NaN, below 1, or above 2^31-1,
+// so such a value would time out every request immediately.
+const MAX_TIMEOUT_MS = 2147483647;
+
+function getTimeoutMs(): number {
+  const timeoutMs = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "", 10);
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return Math.min(timeoutMs, MAX_TIMEOUT_MS);
+}
+
 export function getProxyUrl(): string | undefined {
   return process.env.PERPLEXITY_PROXY ||
          process.env.HTTPS_PROXY ||
@@ -94,7 +107,7 @@ async function makeApiRequest(
   }
 
   // Read timeout fresh each time to respect env var changes
-  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+  const TIMEOUT_MS = getTimeoutMs();
 
   // Append to the base path so a query string in the base URL is preserved.
   const url = new URL(PERPLEXITY_BASE_URL);
@@ -440,7 +453,7 @@ export async function performAgentResponse(
   // PERPLEXITY_TIMEOUT_MS bounds the whole call, not just time-to-headers:
   // streamed responses return headers immediately, so a headers-only timeout
   // would never fire.
-  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+  const TIMEOUT_MS = getTimeoutMs();
   const deadline = new AbortController();
   const timeoutId = setTimeout(() => deadline.abort(), TIMEOUT_MS);
   const abortDeadline = () => deadline.abort();
